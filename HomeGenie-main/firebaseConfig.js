@@ -1,18 +1,21 @@
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, get } from "firebase/database";
+import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCiGVqIj_Q5DcWXn8Te4QBc59-HYpwqiKg",
-  authDomain: "smart-home-system-9565d.firebaseapp.com",
-  databaseURL: "https://smart-home-system-9565d-default-rtdb.firebaseio.com",
-  projectId: "smart-home-system-9565d",
-  storageBucket: "smart-home-system-9565d.firebasestorage.app",
-  messagingSenderId: "988759018762",
-  appId: "1:988759018762:web:c3cd47c91e796741fffef3",
-  measurementId: "G-Z0GV4314X8",
+  apiKey: "AIzaSyDMrnW8tdgThXam-tnBk0dNcRwz_6wQvwI",
+  authDomain: "autohomeglobal-5506f.firebaseapp.com",
+  projectId: "autohomeglobal-5506f",
+  storageBucket: "autohomeglobal-5506f.appspot.com",
+  messagingSenderId: "929603904264",
+  appId: "1:929603904264:web:d987f46a17ec057c4c82bd",
+  measurementId: "G-YJ9FXSMBTY"
 };
 
 const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
 const database = getDatabase(app);
 
-export { database };
+export { db, auth, database };

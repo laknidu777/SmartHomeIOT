@@ -1,300 +1,217 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useState, useRef } from 'react';
 import {
-  StyleSheet,
-  Text,
-  View,
-  Switch,
-  TouchableOpacity,
   ScrollView,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Switch,
   Alert,
-  ActivityIndicator,
   Modal,
-  Button,
-} from "react-native";
-import {
-  Ionicons,
-  MaterialCommunityIcons,
-  MaterialIcons,
-} from "@expo/vector-icons";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import {
-  getDatabase,
-  ref,
-  get,
-  update,
-  onValue,
-  remove,
-} from "firebase/database";
-import { database } from "../firebaseConfig"; // Import the database
+  Pressable,
+  Dimensions,
+} from 'react-native';
+import { auth } from '../firebaseConfig';
+import StatusRow from '../components/StatusRow';
+import { ref, set } from 'firebase/database';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export default function Home() {
-  const [devices, setDevices] = useState([]);
-  const [emgStatus, setEmgStatus] = useState(false);
-  const [loading, setLoading] = useState(true); // Add loading state
-  const [modalVisible, setModalVisible] = useState(false);
-  const [chooseData, setChooseData] = useState({});
-  const navigation = useNavigation();
-  const route = useRoute();
-  const prevNewItemRef = useRef();
-  const [pendingNewItem, setPendingNewItem] = useState(null);
+const { height } = Dimensions.get('window');
+
+export default function SmartDashboard() {
+  const [rooms, setRooms] = useState([]);
+  const [devicesByRoom, setDevicesByRoom] = useState({});
+  const [selectedRoomIndex, setSelectedRoomIndex] = useState(0);
+  const [menuDevice, setMenuDevice] = useState(null);
+  const scrollRef = useRef(null);
+  // Store room positions for better scrolling
+  const [roomPositions, setRoomPositions] = useState([]);
 
   useEffect(() => {
-    const prevNewItem = prevNewItemRef.current;
-    if (route.params?.newItem && route.params?.newItem !== prevNewItem) {
-      setPendingNewItem(route.params.newItem);
-      prevNewItemRef.current = route.params?.newItem;
-    }
-  }, [route.params?.newItem]);
-
-  useEffect(() => {
-    if (pendingNewItem) {
-      const newDevice = { type: pendingNewItem.type, isOn: false };
-      setDevices((prevDevices) => [...prevDevices, newDevice]);
-      setPendingNewItem(null);
-    }
-  }, [pendingNewItem]);
-
-  useEffect(() => {
-    const deviceRef = ref(database, "device");
-    const unsubscribe = onValue(
-      deviceRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          const deviceArray = Object.keys(data).map((key) => ({
-            type: key,
-            isOn: data[key] === 1,
-          }));
-          setDevices(deviceArray);
-        } else {
-          console.log("No data available for devices");
-        }
-        setLoading(false); // Set loading to false after data is fetched
-      },
-      (error) => {
-        console.error("Error fetching device data:", error);
-        setLoading(false); // Set loading to false in case of error
-      }
-    );
-
-    return () => unsubscribe();
-  }, [route.params?.refresh]);
-
-  useEffect(() => {
-    const emgRef = ref(database, "emgSensorData/value");
-    const unsubscribe = onValue(
-      emgRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          setEmgStatus(snapshot.val() === 1);
-        } else {
-          console.log("No data available for EMG sensor");
-        }
-      },
-      (error) => {
-        console.error("Error fetching EMG sensor data:", error);
-      }
-    );
-
-    return () => unsubscribe();
+    fetchCategoriesAndDevices();
   }, []);
 
-  useEffect(() => {
-    if (modalVisible) {
-      const chooseRef = ref(database, "Choose");
-      get(chooseRef)
-        .then((snapshot) => {
-          if (snapshot.exists()) {
-            setChooseData(snapshot.val());
-          } else {
-            console.log("No data available for Choose");
+  const fetchCategoriesAndDevices = async () => {
+    try {
+      const homeId = await AsyncStorage.getItem("homeId");
+      const user = auth.currentUser;
+      if (!user || !homeId) return;
+      const idToken = await user.getIdToken();
+
+      const res = await fetch(`http://localhost:5000/api/categories?homeId=${homeId}`, {
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("❌ Failed to fetch categories:", data.error);
+        return;
+      }
+
+      const categoryList = data.categories || [];
+      setRooms(categoryList);
+
+      const devicesData = {};
+      for (const category of categoryList) {
+        const itemRes = await fetch(
+          `http://localhost:5000/api/items?homeId=${homeId}&categoryId=${category.id}`,
+          {
+            headers: { Authorization: `Bearer ${idToken}` },
           }
-        })
-        .catch((error) => {
-          console.error("Error fetching Choose data:", error);
-        });
+        );
+        const itemData = await itemRes.json();
+        if (itemRes.ok) {
+          devicesData[category.id] = itemData.items || [];
+        }
+      }
+
+      setDevicesByRoom(devicesData);
+    } catch (error) {
+      console.error("Error:", error);
     }
-  }, [modalVisible]);
-
-  const toggleDevice = (index) => {
-    setDevices((prevDevices) => {
-      const updatedDevices = prevDevices.map((device, i) =>
-        i === index ? { ...device, isOn: !device.isOn } : device
-      );
-
-      const updatedDevice = updatedDevices[index];
-      const deviceRef = ref(database, `device/`);
-      update(deviceRef, { [updatedDevice.type]: updatedDevice.isOn ? 1 : 0 });
-
-      return updatedDevices;
-    });
   };
 
-  const confirmDeleteDevice = (index) => {
-    Alert.alert(
-      "Confirm Delete",
-      "Are you sure you want to delete this device?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => deleteDevice(index),
-        },
-      ],
-      { cancelable: true }
-    );
-  };
-
-  const deleteDevice = (index) => {
-    setDevices((prevDevices) => {
-      const updatedDevices = prevDevices.filter((_, i) => i !== index);
-      const deviceToDelete = prevDevices[index];
-
-      const db = getDatabase();
-      const deviceRef = ref(db, `device/${deviceToDelete.type}`);
-      const chooseRef = ref(db, `Choose/${deviceToDelete.type}`); // Also delete from Choose
-
-      remove(deviceRef).catch((error) => {
-        Alert.alert("Error removing device from database:", error);
+  const toggleDevice = async (device) => {
+    try {
+      const newStatus = !device.status;
+      // Note: rtdb is not defined in your original code, you'll need to import it
+      await set(ref(rtdb, `device/${device.espId}`), newStatus);
+      
+      // Create a deep copy of devices to ensure state update triggers
+      setDevicesByRoom(prev => {
+        const updated = {...prev};
+        const roomId = Object.keys(updated).find(roomId => 
+          updated[roomId].some(d => d.id === device.id)
+        );
+        
+        if (roomId) {
+          updated[roomId] = updated[roomId].map(d => 
+            d.id === device.id ? {...d, status: newStatus} : d
+          );
+        }
+        
+        return updated;
       });
-
-      remove(chooseRef).catch((error) => {
-        Alert.alert("Error removing device from Choose collection:", error);
-      });
-
-      return updatedDevices;
-    });
-  };
-
-  const toggleChooseItem = (key) => {
-    setChooseData((prevData) => ({
-      ...prevData,
-      [key]: prevData[key] === 1 ? 0 : 1,
-    }));
-  };
-
-  const handleSubmit = () => {
-    const chooseRef = ref(database, "Choose");
-    update(chooseRef, chooseData)
-      .then(() => {
-        const statusRef = ref(database, "Status");
-        update(statusRef, { Status: 1 }) // Add this line to update the Status field
-          .then(() => {
-            Alert.alert(
-              "Success",
-              "Choose data and Status updated successfully"
-            );
-          })
-          .catch((error) => {
-            Alert.alert("Error updating Status:", error);
-          });
-        setModalVisible(false);
-      })
-      .catch((error) => {
-        Alert.alert("Error updating Choose data:", error);
-      });
-  };
-
-  const getIcon = (type) => {
-    if (type.startsWith("Light")) {
-      return <Ionicons name="bulb-outline" style={styles.icon} />;
-    } else if (type.startsWith("Fan")) {
-      return (
-        <MaterialCommunityIcons
-          name="ceiling-fan-light"
-          size={70}
-          color="#2b2b2b"
-        />
-      );
-    } else if (type.startsWith("Door")) {
-      return <MaterialCommunityIcons name="door-sliding" style={styles.icon} />;
-    } else {
-      return <Ionicons name="bulb-outline" style={styles.icon} />;
+    } catch (error) {
+      console.error('Failed to toggle device:', error);
     }
+  };
+
+  // Handle room position measurement for accurate scrolling
+  const measureRoomPosition = (y, index) => {
+    const positions = [...roomPositions];
+    positions[index] = y;
+    setRoomPositions(positions);
+  };
+
+  const scrollToRoom = (index) => {
+    setSelectedRoomIndex(index);
+    
+    // Use the measured position if available, otherwise estimate
+    const yOffset = roomPositions[index] || index * 350;
+    
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ y: yOffset, animated: true });
+    }
+  };
+
+  const handleMenuAction = (action, device) => {
+    setMenuDevice(null);
+    Alert.alert(`${action}`, `Performing "${action}" on ${device.name}`);
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome</Text>
-      <Text style={styles.subtitle}>Let's manage your smart home</Text>
-      <TouchableOpacity
-        style={styles.addIconContainer}
-        onPress={() => navigation.navigate("AddItem")}
+    <View style={styles.mainContainer}>
+      <StatusRow />
+      
+      <ScrollView 
+        style={styles.scrollContent} 
+        ref={scrollRef}
+        contentContainerStyle={styles.scrollContentContainer}
+        showsVerticalScrollIndicator={true}
       >
-        <Ionicons
-          name="add-circle-outline"
-          size={24}
-          color="black"
-          style={styles.addIcon}
-        />
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={styles.sensorContainer}
-        onPress={() => setModalVisible(true)}
-      >
-        <Ionicons name="pulse-outline" size={24} color="#a2a2a2" />
-        <Text style={styles.sensorText}>EGM Sensor Status</Text>
-        <Text style={styles.sensorStatus}>{emgStatus ? "ON" : "OFF"}</Text>
-      </TouchableOpacity>
-      {loading ? (
-        <ActivityIndicator size="large" color="#1c1c1c" />
-      ) : (
-        <ScrollView contentContainerStyle={styles.scrollViewContent}>
-          <View style={styles.deviceContainer}>
-            {devices.map((device, index) => (
-              <View key={index} style={styles.device}>
-                <View style={styles.TopContainer}>
-                  {getIcon(device.type)}
+        <View style={styles.container}>
+          <Text style={styles.title}>Smart Dashboard</Text>
 
-                  <TouchableOpacity onPress={() => confirmDeleteDevice(index)}>
-                    <MaterialIcons name="delete" size={24} color="#a3a3a3" />
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.typeContainer}>
-                  <Text style={styles.deviceText}>{device.type}</Text>
-                  <Switch
-                    value={device.isOn}
-                    onValueChange={() => toggleDevice(index)}
-                  />
-                </View>
-              </View>
+          {/* Category Tabs */}
+          <View style={styles.roomsGrid}>
+            {rooms.map((room, index) => (
+              <TouchableOpacity
+                key={room.id}
+                style={[
+                  styles.roomCard,
+                  index === selectedRoomIndex && styles.activeRoomCard,
+                ]}
+                onPress={() => scrollToRoom(index)}
+              >
+                <Text style={styles.roomName}>{room.name}</Text>
+                <Text style={styles.deviceCount}>
+                  {devicesByRoom[room.id]?.length || 0} devices
+                </Text>
+              </TouchableOpacity>
             ))}
           </View>
-        </ScrollView>
-      )}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Choose Data</Text>
-            <ScrollView>
-              {Object.keys(chooseData).map((key) => (
-                <View key={key} style={styles.chooseItem}>
-                  <Text>{key}</Text>
-                  <Switch
-                    value={chooseData[key] === 1}
-                    onValueChange={() => toggleChooseItem(key)}
-                  />
-                </View>
-              ))}
-            </ScrollView>
-            <TouchableOpacity style={styles.button} onPress={handleSubmit}>
-              <Text style={{ color: "#fff" }}>Submit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => setModalVisible(false)}
+
+          {/* Devices by Room */}
+          {rooms.map((room, index) => (
+            <View 
+              key={room.id} 
+              onLayout={(event) => {
+                // Measure and store Y position of each room section
+                const { y } = event.nativeEvent.layout;
+                measureRoomPosition(y, index);
+              }}
             >
-              <Text style={{ color: "#fff" }}>Close</Text>
-            </TouchableOpacity>
+              <Text style={styles.sectionTitle}>{room.name} Devices</Text>
+              {devicesByRoom[room.id]?.length > 0 ? (
+                devicesByRoom[room.id].map((device) => (
+                  <View key={device.id} style={styles.deviceCard}>
+                    <View>
+                      <Text style={styles.deviceName}>{device.name}</Text>
+                      <Text style={styles.deviceStatus}>
+                        {device.status ? 'Connected' : 'Disconnected'}
+                      </Text>
+                    </View>
+                    <View style={styles.deviceControls}>
+                      <Switch
+                        value={device.status}
+                        onValueChange={() => toggleDevice(device)}
+                      />
+                      <TouchableOpacity onPress={() => setMenuDevice(device)}>
+                        <Text style={styles.menuDots}>⋮</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.emptyMessage}>No devices found</Text>
+              )}
+            </View>
+          ))}
+          
+          {/* Add padding at the bottom to ensure content isn't hidden by footer */}
+          <View style={styles.footerSpace} />
+        </View>
+      </ScrollView>
+
+      {/* 3-dot menu */}
+      <Modal visible={!!menuDevice} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.menuPopup}>
+            {["Configure", "Move", "Delete"].map((action) => (
+              <Pressable
+                key={action}
+                style={styles.menuItem}
+                onPress={() => handleMenuAction(action, menuDevice)}
+              >
+                <Text>{action}</Text>
+              </Pressable>
+            ))}
+            <Pressable onPress={() => setMenuDevice(null)} style={styles.menuItem}>
+              <Text style={{ color: 'red' }}>Cancel</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -303,128 +220,111 @@ export default function Home() {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  mainContainer: { 
+    flex: 1, 
+    backgroundColor: '#f5f7fb',
+  },
+  scrollContent: { 
     flex: 1,
-    padding: 20,
-    paddingTop: 40,
-    backgroundColor: "#fff",
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginVertical: 1,
+  scrollContentContainer: {
+    // This ensures content is scrollable and not constrained
+    flexGrow: 1,
   },
-  subtitle: {
-    fontSize: 16,
-    color: "#888",
-    marginBottom: 20,
+  container: { 
+    padding: 16,
   },
-  addIconContainer: {
-    position: "relative",
-    top: -50,
+  title: { 
+    fontSize: 24, 
+    fontWeight: 'bold', 
+    marginBottom: 20, 
+    color: '#2d3748',
   },
-  addIcon: {
-    position: "absolute",
-    top: -5,
-    right: 20,
+  roomsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 24,
   },
-  sensorContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 10,
-    marginBottom: 20,
+  roomCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    width: '48%',
+    marginBottom: 12,
+    elevation: 2,
   },
-  sensorText: {
-    fontSize: 16,
+  activeRoomCard: { 
+    borderWidth: 2, 
+    borderColor: '#4299e1',
   },
-  sensorStatus: {
-    fontSize: 16,
-    fontWeight: "bold",
+  roomName: { 
+    fontSize: 16, 
+    fontWeight: '600', 
+    color: '#2d3748',
   },
-
-  TopContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
+  deviceCount: { 
+    fontSize: 14, 
+    color: '#718096',
   },
-  deviceContainer: {
-    flex: 2,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-  },
-  device: {
-    width: "48%",
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 10,
-    alignItems: "left",
-    marginBottom: 20,
-    backgroundColor: "#f9f9f9",
-    position: "relative",
-  },
-
-  scrollViewContent: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    alignContent: "center",
-  },
-
-  typeContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 20,
-  },
-
-  deviceText: {
-    fontSize: 24,
-    marginVertical: 10,
-  },
-  type: {
-    fontSize: 24,
-  },
-
-  icon: {
-    color: "#2b2b2b",
-    fontSize: 70,
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  modalContent: {
-    width: "80%",
-    padding: 20,
-    backgroundColor: "#fff",
-    borderRadius: 10,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  chooseItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2d3748',
     marginBottom: 10,
+    marginTop: 10,
   },
-
-  button: {
-    marginTop: 20,
-    backgroundColor: "#1c1c1c",
-    color: "#fff",
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
+  deviceCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    elevation: 2,
+  },
+  deviceName: { 
+    fontSize: 16, 
+    fontWeight: '600', 
+    color: '#2d3748',
+  },
+  deviceStatus: { 
+    fontSize: 14, 
+    color: '#718096',
+  },
+  deviceControls: { 
+    flexDirection: 'row', 
+    alignItems: 'center',
+  },
+  menuDots: { 
+    fontSize: 20, 
+    marginLeft: 15, 
+    color: '#666',
+  },
+  emptyMessage: { 
+    textAlign: 'center', 
+    color: '#999', 
+    padding: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: '#00000088',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuPopup: {
+    width: 200,
+    backgroundColor: 'white',
+    paddingVertical: 10,
     borderRadius: 10,
+    elevation: 10,
+  },
+  menuItem: {
+    padding: 12,
+    alignItems: 'center',
+  },
+  footerSpace: {
+    height: 80, // Adjust based on your footer height
   },
 });

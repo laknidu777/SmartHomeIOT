@@ -8,8 +8,9 @@ import {
   Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { database } from "../firebaseConfig"; // Import your firebase configuration
-import { ref, set, push } from "firebase/database"; // Import push method from firebase
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
+import { auth, db } from "../firebaseConfig"; // Make sure you export both
 
 export default function Signup() {
   const navigation = useNavigation();
@@ -17,38 +18,42 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleSignup = () => {
+  const handleSignup = async () => {
+    console.log("📥 Signup button pressed");
+  
     if (!name || !email || !password) {
       Alert.alert("Error", "All fields are required");
+      console.warn("⚠️ Missing fields:", { name, email, password });
       return;
     }
-
+  
     if (password.length < 6) {
-      Alert.alert("Error", "Password must be at least 6 characters long");
+      Alert.alert("Error", "Password must be at least 6 characters");
+      console.warn("⚠️ Password too short:", password);
       return;
     }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      Alert.alert("Error", "Invalid email format");
-      return;
-    }
-
-    const newUserRef = push(ref(database, "signup")); // Generate a new unique ID using push
-    // Save user data to Firebase Realtime Database
-    set(newUserRef, {
-      name: name,
-      email: email,
-      password: password,
-    })
-      .then(() => {
-        navigation.navigate("Login");
-      })
-      .catch((error) => {
-        console.error("Error adding document: ", error);
+  
+    try {
+      console.log("🔐 Creating user with email:", email);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      console.log("✅ User created:", user.uid);
+  
+      console.log("📦 Writing user to Firestore...");
+      await setDoc(doc(db, "users", user.uid), {
+        name: name,
+        email: email,
       });
+      console.log("✅ User document saved to Firestore");
+  
+      Alert.alert("Success", "Signup complete");
+      navigation.navigate("Login");
+    } catch (error) {
+      console.error("❌ Signup error:", error);
+      Alert.alert("Signup Failed", error.message);
+    }
   };
-
+  
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Create Account</Text>

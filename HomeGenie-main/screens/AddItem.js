@@ -1,100 +1,163 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  StyleSheet,
-  Text,
   View,
-  Button,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
   Alert,
-  ActivityIndicator,
+  SafeAreaView,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import { useNavigation } from "@react-navigation/native";
-import { getDatabase, ref, set, get, update } from "firebase/database";
+import { db, auth } from "../firebaseConfig";
+import {
+  collection,
+  getDocs,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 
-export default function AddItem() {
-  const [selectedItem, setSelectedItem] = useState("Light");
-  const [loading, setLoading] = useState(false);
+export default function AddItem({ route, navigation }) {
+  const { homeId } = route.params || {};
+  const user = auth.currentUser;
+  const [name, setName] = useState("");
+  const [espId, setEspId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [categories, setCategories] = useState([]);
 
-  const handleAddItem = () => {
-    setLoading(true);
-    const db = getDatabase();
-    const deviceRef = ref(db, "device");
-    get(deviceRef)
-      .then((snapshot) => {
-        const data = snapshot.val() || {};
-        const itemCount = Object.keys(data).filter((key) =>
-          key.startsWith(selectedItem)
-        ).length;
-        const newItemId = `${selectedItem}${itemCount + 1}`; // Removed space
-        const updates = {};
-        updates[`device/${newItemId}`] = 0;
-        updates[`Choose/${newItemId}`] = 0;
-        update(ref(db), updates)
-          .then(() => {
-            setLoading(false);
-            Alert.alert("Success", `New item added: ${newItemId}`);
-          })
-          .catch((error) => {
-            setLoading(false);
-            Alert.alert("Error adding new item to database:", error);
-          });
-      })
-      .catch((error) => {
-        setLoading(false);
-        Alert.alert("Error fetching device data:", error);
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const catRef = collection(db, "users", user.uid, "homes", homeId, "categories");
+        const snapshot = await getDocs(catRef);
+        const list = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setCategories(list);
+        if (list.length > 0) setCategoryId(list[0].id); // default selection
+      } catch (err) {
+        console.error("❌ Failed to load categories:", err);
+      }
+    };
+
+    fetchCategories();
+  }, []);
+
+  const handleAddItem = async () => {
+    if (!name.trim() || !categoryId) {
+      Alert.alert("Error", "Please fill in all fields");
+      return;
+    }
+
+    try {
+      const itemRef = collection(db, "users", user.uid, "homes", homeId, "items");
+      await addDoc(itemRef, {
+        name: name.trim(),
+        espId: espId.trim(),
+        categoryId,
+        status: false,
+        createdAt: serverTimestamp(),
       });
+
+      Alert.alert("Success", "Item added successfully");
+      setName("");
+      setEspId("");
+      navigation.goBack();
+    } catch (error) {
+      console.error("❌ Failed to add item:", error);
+      Alert.alert("Failed to add item");
+    }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Add New Item</Text>
-      <Text style={styles.subtitle}>Let's manage your smart home</Text>
-      <Picker
-        selectedValue={selectedItem}
-        style={styles.input}
-        onValueChange={(itemValue) => setSelectedItem(itemValue)}
-      >
-        <Picker.Item label="Light" value="Light" />
-        <Picker.Item label="Door" value="Door" />
-        <Picker.Item label="Fan" value="Fan" />
-      </Picker>
-      {loading ? (
-        <ActivityIndicator size="large" color="#1c1c1c" />
-      ) : (
-        <Button
-          style={styles.button}
-          title="Add Item"
-          onPress={handleAddItem}
-          disabled={loading}
-          color="#1c1c1c"
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>Add New Item</Text>
+
+        <TextInput
+          style={styles.input}
+          placeholder="Item Name"
+          value={name}
+          onChangeText={setName}
         />
-      )}
-    </View>
+
+        <TextInput
+          style={styles.input}
+          placeholder="ESP ID (optional)"
+          value={espId}
+          onChangeText={setEspId}
+        />
+
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={categoryId}
+            onValueChange={(value) => setCategoryId(value)}
+            style={styles.picker}
+          >
+            {categories.map((cat) => (
+              <Picker.Item key={cat.id} label={cat.name} value={cat.id} />
+            ))}
+          </Picker>
+        </View>
+
+        <TouchableOpacity style={styles.addButton} onPress={handleAddItem}>
+          <Text style={styles.addButtonText}>Add Item</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    padding: 20,
-    backgroundColor: "#fff",
+    backgroundColor: "#f2f2f2",
+  },
+  container: {
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    paddingBottom: 80,
   },
   title: {
     fontSize: 24,
     fontWeight: "bold",
-    marginVertical: 10,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#888",
-    marginBottom: 20,
+    marginBottom: 30,
   },
   input: {
+    width: "100%",
     height: 50,
     borderColor: "#ccc",
     borderWidth: 1,
-    borderRadius: 5,
-    marginBottom: 10,
-    paddingHorizontal: 10,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    marginBottom: 15,
+    backgroundColor: "#fff",
+  },
+  pickerContainer: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    marginBottom: 20,
+  },
+  picker: {
+    width: "100%",
+    height: 50,
+  },
+  addButton: {
+    width: "100%",
+    padding: 15,
+    backgroundColor: "#1c1c1c",
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  addButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });
