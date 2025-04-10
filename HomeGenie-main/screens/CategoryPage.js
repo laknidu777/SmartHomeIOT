@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
+  ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -15,8 +16,10 @@ export default function CategoryPage({ navigation }) {
   const [categories, setCategories] = useState([]);
   const [categoryName, setCategoryName] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const fetchCategories = async () => {
+    setIsLoading(true);
     try {
       const homeId = await AsyncStorage.getItem("homeId");
       const token = await AsyncStorage.getItem("idToken");
@@ -38,6 +41,8 @@ export default function CategoryPage({ navigation }) {
       }
     } catch (err) {
       console.error("Error fetching categories:", err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -84,33 +89,47 @@ export default function CategoryPage({ navigation }) {
     fetchCategories();
   }, []);
 
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Categories</Text>
+  const LoadingAnimation = () => (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color="#06b6d4" />
+      <Text style={styles.loadingText}>Loading categories...</Text>
+    </View>
+  );
 
+  return (
+    <View style={{ flex: 1 }}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>Categories</Text>
+
+        {isLoading ? (
+          <LoadingAnimation />
+        ) : (
+          <View style={styles.grid}>
+            {categories.map((cat) => (
+              <TouchableOpacity
+                key={cat.id}
+                style={styles.tile}
+                onPress={() =>
+                  navigation.navigate("Home", {
+                    categoryId: cat.id,
+                    categoryName: cat.name,
+                  })
+                }
+              >
+                <Text style={styles.tileText}>{cat.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Floating Action Button */}
       <TouchableOpacity
-        style={styles.addButton}
+        style={styles.fab}
         onPress={() => setModalVisible(true)}
       >
-        <Text style={styles.addButtonText}>+ Add Category</Text>
+        <Text style={styles.fabText}>＋</Text>
       </TouchableOpacity>
-
-      <View style={styles.grid}>
-        {categories.map((cat) => (
-          <TouchableOpacity
-            key={cat.id}
-            style={styles.tile}
-            onPress={() =>
-              navigation.navigate("Home", {
-                categoryId: cat.id,
-                categoryName: cat.name,
-              })
-            }
-          >
-            <Text style={styles.tileText}>{cat.name}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
 
       {/* Modal for Add Category */}
       <Modal
@@ -127,6 +146,7 @@ export default function CategoryPage({ navigation }) {
               value={categoryName}
               onChangeText={setCategoryName}
               style={styles.modalInput}
+              placeholderTextColor="#a0aec0"
             />
             <View style={styles.modalButtons}>
               <TouchableOpacity
@@ -139,13 +159,13 @@ export default function CategoryPage({ navigation }) {
                 style={styles.saveButton}
                 onPress={handleAddCategory}
               >
-                <Text style={{ color: "white" }}>Save</Text>
+                <Text style={{ color: "white" }}>Add</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -160,19 +180,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 15,
     textAlign: "center",
-  },
-  addButton: {
-    backgroundColor: "#4299e1",
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    alignSelf: "center",
-    marginBottom: 20,
-  },
-  addButtonText: {
-    color: "white",
-    fontWeight: "bold",
-    fontSize: 16,
   },
   grid: {
     flexDirection: "row",
@@ -191,6 +198,41 @@ const styles = StyleSheet.create({
   tileText: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 100,
+    paddingBottom: 100,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: "#718096",
+    fontWeight: "500",
+  },
+  fab: {
+    position: "absolute",
+    bottom: 24,
+    right: 24,
+    backgroundColor: "#06b6d4", // cyan
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  fabText: {
+    color: "white",
+    fontSize: 28,
+    fontWeight: "bold",
+    marginTop: -1,
   },
   modalOverlay: {
     flex: 1,
@@ -216,6 +258,7 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 8,
     marginBottom: 16,
+    color: "#2d3748",
   },
   modalButtons: {
     flexDirection: "row",
@@ -231,7 +274,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   saveButton: {
-    backgroundColor: "#4299e1",
+    backgroundColor: "#06b6d4", // cyan
     padding: 12,
     borderRadius: 8,
     flex: 1,

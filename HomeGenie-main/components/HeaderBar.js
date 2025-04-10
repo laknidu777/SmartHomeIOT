@@ -6,7 +6,7 @@ export default function HeaderBar({ onMenuPress, userInitial = 'A' }) {
   return (
     <View style={{
       height: 56,
-      backgroundColor: '#00A6FF',
+      backgroundColor: '#06b6d4',
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
