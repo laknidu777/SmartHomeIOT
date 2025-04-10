@@ -1,9 +1,9 @@
 // App.js
 import "react-native-gesture-handler";
-import { StatusBar } from "expo-status-bar";
+//import { StatusBar } from "expo-status-bar";
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+//import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import Login from "./screens/Login";
 import Signup from "./screens/Signup";
 import Home from "./screens/Home";
@@ -13,9 +13,11 @@ import SelectVehicle from "./screens/SelectHome";
 import SelectHome from "./screens/SelectHome";
 import AddCategory from "./screens/AddCategory";
 import SplashScreen from "./screens/SplashScreen";
-import FirebaseTest from "./screens/FirebaseTest";
+import ConfigureDevices from "./screens/ConfigureDevices";
+//import FirebaseTest from "./screens/FirebaseTest";
 import AppLayout from "./components/AppLayout";
-
+import CategoryPage from "./screens/CategoryPage";
+import DevicePage from "./screens/DevicePage";
 import { useEffect } from "react";
 import { getDoc, doc } from "firebase/firestore";
 import { db } from "./firebaseConfig";
@@ -48,14 +50,35 @@ export default function App() {
         <Stack.Screen name="SplashScreen" component={SplashScreen} />
         <Stack.Screen
           name="Home"
-          children={() => (
-            <AppLayout>
+          children={({ navigation }) => (
+            <AppLayout navigation={navigation}>
               <Home />
             </AppLayout>
           )}
         />
+
+        <Stack.Screen
+          name="CategoryPage"
+          children={({ navigation }) => (
+            <AppLayout navigation={navigation}>
+              <CategoryPage />
+            </AppLayout>
+          )}
+        />
+        <Stack.Screen
+          name="DevicePage"
+          children={({ navigation }) => (
+            <AppLayout navigation={navigation}>
+              <DevicePage />
+            </AppLayout>
+          )}
+        />
+
         <Stack.Screen name="AddItem" component={AddItem} />
         <Stack.Screen name="AddCategory" component={AddCategory} />
+        <Stack.Screen name="ConfigureDevices" component={ConfigureDevices} 
+        options={{ headerShown: false }}
+        />
         <Stack.Screen name="User" component={User} />
         <Stack.Screen name="Signup" component={Signup} />
         <Stack.Screen name="SelectHome" component={SelectHome} />

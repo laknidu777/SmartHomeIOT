@@ -10,6 +10,7 @@ import {
   Modal,
   Pressable,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { auth } from '../firebaseConfig';
 import StatusRow from '../components/StatusRow';
@@ -23,8 +24,9 @@ export default function SmartDashboard() {
   const [devicesByRoom, setDevicesByRoom] = useState({});
   const [selectedRoomIndex, setSelectedRoomIndex] = useState(0);
   const [menuDevice, setMenuDevice] = useState(null);
+  const [menuRoom, setMenuRoom] = useState(null);
+  const [loading, setLoading] = useState(true);
   const scrollRef = useRef(null);
-  // Store room positions for better scrolling
   const [roomPositions, setRoomPositions] = useState([]);
 
   useEffect(() => {
@@ -32,13 +34,14 @@ export default function SmartDashboard() {
   }, []);
 
   const fetchCategoriesAndDevices = async () => {
+    setLoading(true);
     try {
       const homeId = await AsyncStorage.getItem("homeId");
       const user = auth.currentUser;
       if (!user || !homeId) return;
       const idToken = await user.getIdToken();
 
-      const res = await fetch(`http://localhost:5000/api/categories?homeId=${homeId}`, {
+      const res = await fetch(`http://192.168.8.141:5000/api/categories?homeId=${homeId}`, {
         headers: {
           Authorization: `Bearer ${idToken}`,
         },
@@ -56,7 +59,7 @@ export default function SmartDashboard() {
       const devicesData = {};
       for (const category of categoryList) {
         const itemRes = await fetch(
-          `http://localhost:5000/api/items?homeId=${homeId}&categoryId=${category.id}`,
+          `http://192.168.8.141:5000/api/items?homeId=${homeId}&categoryId=${category.id}`,
           {
             headers: { Authorization: `Bearer ${idToken}` },
           }
@@ -70,28 +73,25 @@ export default function SmartDashboard() {
       setDevicesByRoom(devicesData);
     } catch (error) {
       console.error("Error:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const toggleDevice = async (device) => {
     try {
       const newStatus = !device.status;
-      // Note: rtdb is not defined in your original code, you'll need to import it
       await set(ref(rtdb, `device/${device.espId}`), newStatus);
-      
-      // Create a deep copy of devices to ensure state update triggers
       setDevicesByRoom(prev => {
-        const updated = {...prev};
-        const roomId = Object.keys(updated).find(roomId => 
+        const updated = { ...prev };
+        const roomId = Object.keys(updated).find(roomId =>
           updated[roomId].some(d => d.id === device.id)
         );
-        
         if (roomId) {
-          updated[roomId] = updated[roomId].map(d => 
-            d.id === device.id ? {...d, status: newStatus} : d
+          updated[roomId] = updated[roomId].map(d =>
+            d.id === device.id ? { ...d, status: newStatus } : d
           );
         }
-        
         return updated;
       });
     } catch (error) {
@@ -99,7 +99,6 @@ export default function SmartDashboard() {
     }
   };
 
-  // Handle room position measurement for accurate scrolling
   const measureRoomPosition = (y, index) => {
     const positions = [...roomPositions];
     positions[index] = y;
@@ -108,26 +107,36 @@ export default function SmartDashboard() {
 
   const scrollToRoom = (index) => {
     setSelectedRoomIndex(index);
-    
-    // Use the measured position if available, otherwise estimate
     const yOffset = roomPositions[index] || index * 350;
-    
     if (scrollRef.current) {
       scrollRef.current.scrollTo({ y: yOffset, animated: true });
     }
   };
 
-  const handleMenuAction = (action, device) => {
+  const handleDeviceMenuAction = (action, device) => {
     setMenuDevice(null);
     Alert.alert(`${action}`, `Performing "${action}" on ${device.name}`);
   };
 
+  const handleRoomMenuAction = (action, room) => {
+    setMenuRoom(null);
+    Alert.alert(`${action}`, `Performing "${action}" on room ${room.name}`);
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#4299e1" />
+        <Text style={{ marginTop: 12, color: '#666' }}>Loading devices...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.mainContainer}>
       <StatusRow />
-      
-      <ScrollView 
-        style={styles.scrollContent} 
+      <ScrollView
+        style={styles.scrollContent}
         ref={scrollRef}
         contentContainerStyle={styles.scrollContentContainer}
         showsVerticalScrollIndicator={true}
@@ -146,70 +155,103 @@ export default function SmartDashboard() {
                 ]}
                 onPress={() => scrollToRoom(index)}
               >
-                <Text style={styles.roomName}>{room.name}</Text>
-                <Text style={styles.deviceCount}>
-                  {devicesByRoom[room.id]?.length || 0} devices
-                </Text>
+                <View style={styles.roomCardContent}>
+                  <View>
+                    <Text style={styles.roomName}>{room.name}</Text>
+                    <Text style={styles.deviceCount}>
+                      {devicesByRoom[room.id]?.length || 0} devices
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setMenuRoom(room)}>
+                    <Text style={styles.menuDots}>⋮</Text>
+                  </TouchableOpacity>
+                </View>
               </TouchableOpacity>
             ))}
           </View>
 
           {/* Devices by Room */}
           {rooms.map((room, index) => (
-            <View 
-              key={room.id} 
+            <View
+              key={room.id}
               onLayout={(event) => {
-                // Measure and store Y position of each room section
                 const { y } = event.nativeEvent.layout;
                 measureRoomPosition(y, index);
               }}
             >
-              <Text style={styles.sectionTitle}>{room.name} Devices</Text>
+              <View style={[
+                styles.roomHeader,
+                index === selectedRoomIndex && styles.activeRoomHeader
+              ]}>
+                <Text style={[
+                  styles.roomHeaderText,
+                  { color: index === selectedRoomIndex ? 'white' : '#2d3748' }
+                ]}>
+                  {room.name}
+                </Text>
+              </View>
               {devicesByRoom[room.id]?.length > 0 ? (
-                devicesByRoom[room.id].map((device) => (
-                  <View key={device.id} style={styles.deviceCard}>
-                    <View>
-                      <Text style={styles.deviceName}>{device.name}</Text>
-                      <Text style={styles.deviceStatus}>
-                        {device.status ? 'Connected' : 'Disconnected'}
-                      </Text>
+                <View style={styles.devicesGrid}>
+                  {devicesByRoom[room.id].map((device) => (
+                    <View key={device.id} style={styles.deviceCard}>
+                      <View>
+                        <Text style={styles.deviceName}>{device.name}</Text>
+                        <Text style={styles.deviceStatus}>
+                          {device.status ? 'Connected' : 'Disconnected'}
+                        </Text>
+                      </View>
+                      <View style={styles.deviceControls}>
+                        <Switch
+                          value={device.status}
+                          onValueChange={() => toggleDevice(device)}
+                        />
+                        <TouchableOpacity onPress={() => setMenuDevice(device)}>
+                          <Text style={styles.menuDots}>⋮</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                    <View style={styles.deviceControls}>
-                      <Switch
-                        value={device.status}
-                        onValueChange={() => toggleDevice(device)}
-                      />
-                      <TouchableOpacity onPress={() => setMenuDevice(device)}>
-                        <Text style={styles.menuDots}>⋮</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))
+                  ))}
+                </View>
               ) : (
                 <Text style={styles.emptyMessage}>No devices found</Text>
               )}
             </View>
           ))}
-          
-          {/* Add padding at the bottom to ensure content isn't hidden by footer */}
           <View style={styles.footerSpace} />
         </View>
       </ScrollView>
 
-      {/* 3-dot menu */}
-      <Modal visible={!!menuDevice} transparent animationType="fade">
+      {/* Modal for Room & Device Menus */}
+      <Modal visible={!!menuDevice || !!menuRoom} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.menuPopup}>
-            {["Configure", "Move", "Delete"].map((action) => (
-              <Pressable
-                key={action}
-                style={styles.menuItem}
-                onPress={() => handleMenuAction(action, menuDevice)}
-              >
-                <Text>{action}</Text>
-              </Pressable>
-            ))}
-            <Pressable onPress={() => setMenuDevice(null)} style={styles.menuItem}>
+            {menuDevice && (
+              <>
+                {["Configure", "Move", "Delete"].map((action) => (
+                  <Pressable
+                    key={action}
+                    style={styles.menuItem}
+                    onPress={() => handleDeviceMenuAction(action, menuDevice)}
+                  >
+                    <Text>{action}</Text>
+                  </Pressable>
+                ))}
+              </>
+            )}
+            {menuRoom && (
+              <>
+                {["Configure Room", "Rename Room", "Delete Room"].map((action) => (
+                  <Pressable
+                    key={action}
+                    style={styles.menuItem}
+                    onPress={() => handleRoomMenuAction(action, menuRoom)}
+                  >
+                    <Text>{action}</Text>
+                  </Pressable>
+                ))}
+              </>
+            )}
+            <Pressable onPress={() => { setMenuDevice(null); setMenuRoom(null); }} style={styles.menuItem}>
               <Text style={{ color: 'red' }}>Cancel</Text>
             </Pressable>
           </View>
@@ -218,26 +260,24 @@ export default function SmartDashboard() {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
-  mainContainer: { 
-    flex: 1, 
+  mainContainer: {
+    flex: 1,
     backgroundColor: '#f5f7fb',
   },
-  scrollContent: { 
+  scrollContent: {
     flex: 1,
   },
   scrollContentContainer: {
-    // This ensures content is scrollable and not constrained
     flexGrow: 1,
   },
-  container: { 
+  container: {
     padding: 16,
   },
-  title: { 
-    fontSize: 24, 
-    fontWeight: 'bold', 
-    marginBottom: 20, 
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
     color: '#2d3748',
   },
   roomsGrid: {
@@ -254,57 +294,72 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     elevation: 2,
   },
-  activeRoomCard: { 
-    borderWidth: 2, 
+  activeRoomCard: {
+    borderWidth: 2,
     borderColor: '#4299e1',
   },
-  roomName: { 
-    fontSize: 16, 
-    fontWeight: '600', 
-    color: '#2d3748',
+  roomCardContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  deviceCount: { 
-    fontSize: 14, 
-    color: '#718096',
-  },
-  sectionTitle: {
-    fontSize: 18,
+  roomName: {
+    fontSize: 16,
     fontWeight: '600',
     color: '#2d3748',
+  },
+  deviceCount: {
+    fontSize: 14,
+    color: '#718096',
+  },
+  roomHeader: {
+    backgroundColor: '#e2e8f0',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     marginBottom: 10,
-    marginTop: 10,
+    borderRadius: 8,
+  },
+  activeRoomHeader: {
+    backgroundColor: '#4299e1',
+  },
+  roomHeaderText: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  devicesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
   },
   deviceCard: {
     backgroundColor: 'white',
     borderRadius: 12,
     padding: 16,
+    width: '48%', // Two cards per row
     marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     elevation: 2,
   },
-  deviceName: { 
-    fontSize: 16, 
-    fontWeight: '600', 
+  deviceName: {
+    fontSize: 16,
+    fontWeight: '600',
     color: '#2d3748',
   },
-  deviceStatus: { 
-    fontSize: 14, 
+  deviceStatus: {
+    fontSize: 14,
     color: '#718096',
   },
-  deviceControls: { 
-    flexDirection: 'row', 
+  deviceControls: {
+    flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 8,
   },
-  menuDots: { 
-    fontSize: 20, 
-    marginLeft: 15, 
+  menuDots: {
+    fontSize: 20,
     color: '#666',
   },
-  emptyMessage: { 
-    textAlign: 'center', 
-    color: '#999', 
+  emptyMessage: {
+    textAlign: 'center',
+    color: '#999',
     padding: 10,
   },
   modalOverlay: {
@@ -325,6 +380,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerSpace: {
-    height: 80, // Adjust based on your footer height
+    height: 80,
   },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f7fb',
+  },
+  
 });

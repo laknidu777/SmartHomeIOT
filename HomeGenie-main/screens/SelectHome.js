@@ -50,7 +50,7 @@ export default function SelectHome() {
     
         const idToken = await user.getIdToken();
     
-        const res = await fetch(`http://localhost:5000/api/homes`, {
+        const res = await fetch(`http://192.168.8.141:5000/api/homes`, {
           headers: {
             Authorization: `Bearer ${idToken}`,
           },
@@ -82,7 +82,7 @@ export default function SelectHome() {
 
       const idToken = await user.getIdToken();
 
-      const res = await fetch("http://localhost:5000/api/homes", {
+      const res = await fetch("http://192.168.8.141:5000/api/homes", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${idToken}`,

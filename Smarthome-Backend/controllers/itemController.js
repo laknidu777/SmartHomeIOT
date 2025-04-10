@@ -25,6 +25,7 @@ exports.createItem = async (req, res) => {
       espId,
       status,
       createdAt: new Date(),
+      homeId,
     };
 
     await itemRef.set(itemData);
@@ -65,5 +66,30 @@ exports.getItems = async (req, res) => {
   } catch (err) {
     console.error("❌ Error fetching items:", err);
     res.status(500).json({ error: "Internal server error" });
+  }
+};
+// Get all devices for a home (across all categories)
+exports.getAllItemsByHome = async (req, res) => {
+  try {
+    const { homeId } = req.query;
+
+    if (!homeId) {
+      return res.status(400).json({ message: "Missing homeId" });
+    }
+
+    const itemsSnapshot = await firestore
+      .collectionGroup("items") 
+      .where("homeId", "==", homeId)
+      .get();
+
+    const items = itemsSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    return res.status(200).json({ items });
+  } catch (error) {
+    console.error("Error fetching all items:", error);
+    return res.status(500).json({ message: "Failed to fetch items" });
   }
 };

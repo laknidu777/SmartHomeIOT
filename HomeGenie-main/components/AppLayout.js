@@ -1,40 +1,32 @@
-// components/AppLayout.js
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import HeaderBar from './HeaderBar';
-import FooterBar from './FooterBar';
-import Sidebar from './Sidebar';
+// AppLayout.js
+import React from "react";
+import { View, StyleSheet } from "react-native";
+import HeaderBar from "./HeaderBar";
+import FooterBar from "./FooterBar";
+import { useNavigation } from "@react-navigation/native";
+
+
 
 export default function AppLayout({ children }) {
-  const [sidebarVisible, setSidebarVisible] = useState(false);
-
+  const navigation = useNavigation();
   return (
-    <View style={styles.mainContainer}>
-      <HeaderBar onMenuPress={() => setSidebarVisible(true)} userInitial="A" />
-      <Sidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
-
-      <View style={styles.contentAndFooter}>
-        <ScrollView 
-          style={styles.contentContainer} 
-          scrollEnabled={!sidebarVisible}
-          contentContainerStyle={{ paddingBottom: 70 }} // Adjust padding if needed
-        >
-          {children}
-        </ScrollView>
-        <FooterBar />
+    <View style={styles.container}>
+      <HeaderBar />
+      <View style={styles.content}>
+        {children}
       </View>
-
-      <FooterBar />
+      <FooterBar navigation={navigation} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  mainContainer: {
+  container: {
     flex: 1,
-    backgroundColor: '#f5f7fb',
+    backgroundColor: "#f5f5f5",
   },
-  contentContainer: {
+  content: {
     flex: 1,
+    padding: 10,
   },
 });

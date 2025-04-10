@@ -12,10 +12,29 @@ import {
   Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 
 export default function Sidebar({ visible, onClose }) {
   const [darkMode, setDarkMode] = useState(false);
   const slideAnimation = new Animated.Value(0);
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const name = await AsyncStorage.getItem('name'); // assuming you store this on signup
+        const email = await AsyncStorage.getItem('email');
+        if (name) setUserName(name);
+        if (email) setUserEmail(email);
+      } catch (e) {
+        console.error("❌ Failed to load user data:", e);
+      }
+    };
+  
+    fetchUserData();
+  }, []);
   
   useEffect(() => {
     if (visible) {
@@ -56,8 +75,9 @@ export default function Sidebar({ visible, onClose }) {
               <Text style={styles.avatarText}>A</Text>
             </View>
             <View>
-              <Text style={styles.username}>Alex Johnson</Text>
-              <Text style={styles.email}>alex.j@example.com</Text>
+            <Text style={styles.username}>{userName}</Text>
+            <Text style={styles.email}>{userEmail}</Text>
+
             </View>
           </View>
 

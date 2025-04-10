@@ -16,7 +16,8 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../firebaseConfig";
+import { auth,db } from "../firebaseConfig";
+import { doc, getDoc } from "firebase/firestore";
 
 export default function Login() {
   const navigation = useNavigation();
@@ -68,13 +69,23 @@ export default function Login() {
       // Get the Firebase ID Token
       const idToken = await user.getIdToken();
       console.log("🪪 ID Token:", idToken);
+      const userDocRef = doc(db, "users", user.uid);
+      const userSnap = await getDoc(userDocRef);
+
+      let name = "User";
+      if (userSnap.exists()) {
+        name = userSnap.data().name || "User";
+      }
 
       // Store the ID token and userId for future authenticated requests
       await AsyncStorage.setItem("userId", user.uid);
       await AsyncStorage.setItem("idToken", idToken);
+      await AsyncStorage.setItem("email", user.email); // 👈 This is guaranteed
+      await AsyncStorage.setItem("name", name);  // fetched from Firestore above
+
 
       // Navigate to the main screen
-      navigation.navigate("SplashScreen");
+      navigation.navigate("SelectHome");
 
     } catch (error) {
       console.error("❌ Login error:", error);

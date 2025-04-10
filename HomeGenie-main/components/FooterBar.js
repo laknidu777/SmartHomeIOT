@@ -1,22 +1,23 @@
-// components/FooterBar.js
+// FooterBar.js
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function FooterBar() {
+
+export default function FooterBar({ navigation }) {
   return (
     <View style={styles.footer}>
-      <TouchableOpacity style={styles.navItem}>
+      <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate("Home")}>
         <Ionicons name="home-outline" size={22} color="#4299e1" />
         <Text style={styles.label}>Home</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.navItem}>
+      <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate("CategoryPage")}>
         <Ionicons name="cube-outline" size={22} color="#718096" />
         <Text style={styles.label}>Rooms</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.navItem}>
+      <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate("DevicePage")}>
         <Ionicons name="bulb-outline" size={22} color="#718096" />
         <Text style={styles.label}>Devices</Text>
       </TouchableOpacity>
@@ -28,7 +29,6 @@ export default function FooterBar() {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   footer: {
     height: 56,
