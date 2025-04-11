@@ -4,23 +4,20 @@
 #include <HTTPClient.h>
 #include <EEPROM.h>
 
-const char* firebaseHost = "https://smart-home-system-9565d-default-rtdb.firebaseio.com/";
-const char* firebaseSecret = "AiJDlCwbWOPYDjTtj6eXmoDGWc30B9XO5USQMg3o";
+const int relayPin = 2;
+const int LedPin = 4;
+#define RESET_PIN 0
 
-const int relayPin = 2;       // GPIO controlling the relay
-const int LedPin = 4;         // GPIO indicating Wi-Fi status
-#define RESET_PIN 0           // BOOT button (GPIO 0 for reset)
-
-// Button press timing variables
-unsigned long buttonPressStartTime = 0;
-bool buttonPressed = false;
-const long resetPressTime = 6000; // 6 seconds for reset
-
-WebServer server(80);
+String espId = "";
 String ssid = "";
 String password = "";
+const long resetPressTime = 6000;
+unsigned long buttonPressStartTime = 0;
+bool buttonPressed = false;
 
-// ------------------- EEPROM Utilities ---------------------
+WebServer server(80);
+
+// ------------------- EEPROM ---------------------
 void saveWiFiCredentials(String ssid, String password) {
   EEPROM.begin(64);
   for (int i = 0; i < 32; i++) {
@@ -52,48 +49,44 @@ void clearWiFiCredentials() {
 }
 
 // ------------------- Web UI ---------------------
-String webPage = R"rawliteral(
-  <!DOCTYPE html>
-  <html>
-  <head>
-    <title>WiFi Setup</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+String getWebPage() {
+  String page = R"rawliteral(
+    <!DOCTYPE html>
+    <html>
+    <head><title>WiFi Setup</title><meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
       body { font-family: Arial, sans-serif; margin: 20px; }
       h2 { color: #0066cc; }
-      input[type="text"], input[type="password"] { 
-        width: 100%; 
-        padding: 10px; 
-        margin: 8px 0; 
-        box-sizing: border-box; 
+      input[type="text"], input[type="password"] {
+        width: 100%; padding: 10px; margin: 8px 0; box-sizing: border-box;
       }
       input[type="submit"] {
-        background-color: #4CAF50;
-        color: white;
-        padding: 12px 20px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        width: 100%;
+        background-color: #4CAF50; color: white; padding: 12px 20px;
+        border: none; border-radius: 4px; cursor: pointer; width: 100%;
       }
-      input[type="submit"]:hover {
-        background-color: #45a049;
-      }
+      input[type="submit"]:hover { background-color: #45a049; }
+      .info { margin-top: 20px; font-size: 14px; color: #555; }
     </style>
-  </head>
-  <body>
-    <h2>Light Config</h2>
-    <form action="/save">
-      SSID: <input type="text" name="ssid"><br>
-      Password: <input type="password" name="password"><br><br>
-      <input type="submit" value="Save & Connect">
-    </form>
-  </body>
-  </html>
-)rawliteral";
+    </head><body>
+      <h2>Light Config</h2>
+      <form action="/save">
+        SSID: <input type="text" name="ssid"><br>
+        Password: <input type="password" name="password"><br><br>
+        <input type="submit" value="Save & Connect">
+      </form>
+      <div class="info">
+        <p><strong>ESP ID:</strong> )rawliteral";
+  page += espId;
+  page += R"rawliteral(</p>
+        <p>Use this ID when adding your device in the app.</p>
+      </div>
+    </body></html>
+  )rawliteral";
+  return page;
+}
 
 void handleRoot() {
-  server.send(200, "text/html", webPage);
+  server.send(200, "text/html", getWebPage());
 }
 
 void handleSave() {
@@ -119,26 +112,23 @@ void startAPMode() {
   server.begin();
 }
 
-// ------------------- Wi-Fi Connect ---------------------
+// ------------------- Connect to WiFi ---------------------
 void connectToWiFi() {
   WiFi.begin(ssid.c_str(), password.c_str());
   Serial.print("🔌 Connecting to Wi-Fi");
   int attempts = 0;
-  
-  // Blink LED while trying to connect
+
   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-    digitalWrite(LedPin, HIGH);
-    delay(250);
-    digitalWrite(LedPin, LOW);
-    delay(250);
+    digitalWrite(LedPin, HIGH); delay(250);
+    digitalWrite(LedPin, LOW); delay(250);
     Serial.print(".");
     attempts++;
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✅ Connected to: " + String(ssid));
+    Serial.println("\n✅ Connected to: " + ssid);
     Serial.println("IP address: " + WiFi.localIP().toString());
-    digitalWrite(LedPin, HIGH);  // Solid ON when connected
+    digitalWrite(LedPin, HIGH);
   } else {
     Serial.println("\n⚠️ Failed to connect. Starting AP mode...");
     digitalWrite(LedPin, LOW);
@@ -146,25 +136,50 @@ void connectToWiFi() {
   }
 }
 
-// ------------------- Firebase ---------------------
+
+// ------------------- Register ESP32 on Backend ---------------------
+void registerDevice() {
+  HTTPClient http;
+  String backendURL = "http://192.168.8.141:5000/api/devices/register";  // Your local backend
+
+  http.begin(backendURL);
+  http.addHeader("Content-Type", "application/json");
+
+  String payload = "{\"espId\":\"" + espId + "\"}";
+
+  int httpCode = http.POST(payload);
+
+  if (httpCode > 0) {
+    String response = http.getString();
+    Serial.println("✅ Device registered: " + response);
+  } else {
+    Serial.print("❌ Failed to register: ");
+    Serial.println(httpCode);
+  }
+
+  http.end();
+}
+
+// ------------------- Relay Control ---------------------
 void controlRelay() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-    String url = String(firebaseHost) + "/device/Light1.json?auth=" + firebaseSecret;
-    http.begin(url);
-    int httpResponseCode = http.GET();
+    String url = "http://192.168.8.141:5000/api/devices/" + espId;
 
-    if (httpResponseCode > 0) {
+    http.begin(url);
+    int httpCode = http.GET();
+
+    if (httpCode > 0) {
       String payload = http.getString();
-      Serial.println("📨 Firebase data: " + payload);
-      if (payload.indexOf("0") > -1) {
+      Serial.println("📨 Device status: " + payload);
+      if (payload.indexOf("false") > -1 || payload.indexOf("0") > -1) {
         digitalWrite(relayPin, HIGH); // OFF
       } else {
         digitalWrite(relayPin, LOW);  // ON
       }
     } else {
       Serial.print("❌ HTTP error: ");
-      Serial.println(httpResponseCode);
+      Serial.println(httpCode);
     }
     http.end();
   }
@@ -176,60 +191,49 @@ void setup() {
   pinMode(relayPin, OUTPUT);
   pinMode(LedPin, OUTPUT);
   pinMode(RESET_PIN, INPUT_PULLUP);
-  digitalWrite(relayPin, HIGH); // default OFF
-  digitalWrite(LedPin, LOW);    // default LED off
+  digitalWrite(relayPin, HIGH);
+  digitalWrite(LedPin, LOW);
 
-  Serial.println("\n\n----- ESP32 Light Controller Starting -----");
-  
-  // Check if BOOT button is held at startup
+  espId = "esp_" + String((uint64_t)ESP.getEfuseMac(), HEX);
+  Serial.println("🔗 ESP ID: " + espId);
+
   delay(500);
   if (digitalRead(RESET_PIN) == LOW) {
-    Serial.println("BOOT button pressed during startup - clearing WiFi credentials");
-    clearWiFiCredentials();  // Hold BOOT button during startup
+    Serial.println("BOOT button pressed at startup - resetting WiFi.");
+    clearWiFiCredentials();
   }
 
   loadWiFiCredentials();
   if (ssid != "" && password != "") {
-    Serial.println("Found saved credentials for: " + ssid);
     connectToWiFi();
+    registerDevice();  // 👈 Call after WiFi is connected
   } else {
-    Serial.println("No WiFi credentials found");
     startAPMode();
   }
 }
 
 // ------------------- Loop ---------------------
 void loop() {
-  // Monitor BOOT button for long press during operation
   if (digitalRead(RESET_PIN) == LOW) {
     if (!buttonPressed) {
       buttonPressed = true;
       buttonPressStartTime = millis();
-      Serial.println("BOOT button pressed, hold for 6 seconds to reset WiFi");
-    } else {
-      // Check if button has been pressed long enough
-      if ((millis() - buttonPressStartTime) > resetPressTime) {
-        Serial.println("Long press detected! Clearing WiFi credentials...");
-        // Visual feedback for reset
-        for (int i = 0; i < 5; i++) {
-          digitalWrite(LedPin, HIGH);
-          delay(100);
-          digitalWrite(LedPin, LOW);
-          delay(100);
-        }
-        clearWiFiCredentials();
-        // No need to restart here as clearWiFiCredentials() already does that
+      Serial.println("BOOT button pressed, hold 6s to reset WiFi");
+    } else if ((millis() - buttonPressStartTime) > resetPressTime) {
+      Serial.println("Detected long press — resetting WiFi!");
+      for (int i = 0; i < 5; i++) {
+        digitalWrite(LedPin, HIGH); delay(100);
+        digitalWrite(LedPin, LOW); delay(100);
       }
+      clearWiFiCredentials();
     }
   } else {
-    buttonPressed = false; // Reset when button is released
+    buttonPressed = false;
   }
 
-  // Regular operation
   if (WiFi.status() == WL_CONNECTED) {
     controlRelay();
   } else {
-    // If in AP mode, handle clients and blink LED slowly
     server.handleClient();
     static unsigned long previousMillis = 0;
     static bool ledState = false;
@@ -239,6 +243,6 @@ void loop() {
       digitalWrite(LedPin, ledState);
     }
   }
-  
+
   delay(100);
 }

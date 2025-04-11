@@ -142,7 +142,7 @@ export default function SmartDashboard() {
         showsVerticalScrollIndicator={true}
       >
         <View style={styles.container}>
-          <Text style={styles.title}>Smart Dashboard</Text>
+          <Text style={styles.title}>Dashboard</Text>
 
           {/* Category Tabs */}
           <View style={styles.roomsGrid}>

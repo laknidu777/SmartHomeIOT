@@ -8,7 +8,7 @@ const bodyParser = require("body-parser");
 const homeRoutes = require("./routes/homeRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const itemRoutes = require("./routes/itemRoutes");
-// const deviceRoutes = require("./routes/deviceRoutes");
+const deviceRoutes = require("./routes/deviceRoutes");
 
 const app = express();
 app.use(cors());
@@ -18,7 +18,7 @@ app.use(bodyParser.json());
 app.use("/api/homes", homeRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/items", itemRoutes);
-// app.use("/api/devices", deviceRoutes);
+app.use("/api/devices", deviceRoutes);
 
 
 
