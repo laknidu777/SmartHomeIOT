@@ -1,16 +1,15 @@
 import React, { useState } from "react";
 import {
-  StyleSheet,
+  View,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  StyleSheet,
+  Image,
   Alert,
 } from "react-native";
+import api from "../utils/api";
 import { useNavigation } from "@react-navigation/native";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
-import { auth, db } from "../firebaseConfig"; // Make sure you export both
 
 export default function Signup() {
   const navigation = useNavigation();
@@ -19,110 +18,80 @@ export default function Signup() {
   const [password, setPassword] = useState("");
 
   const handleSignup = async () => {
-    console.log("📥 Signup button pressed");
-  
-    if (!name || !email || !password) {
-      Alert.alert("Error", "All fields are required");
-      console.warn("⚠️ Missing fields:", { name, email, password });
-      return;
-    }
-  
-    if (password.length < 6) {
-      Alert.alert("Error", "Password must be at least 6 characters");
-      console.warn("⚠️ Password too short:", password);
-      return;
-    }
-  
     try {
-      console.log("🔐 Creating user with email:", email);
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      console.log("✅ User created:", user.uid);
-  
-      console.log("📦 Writing user to Firestore...");
-      await setDoc(doc(db, "users", user.uid), {
-        name: name,
-        email: email,
+      await api.post("/api/users/register", {
+        name,
+        email,
+        password,
       });
-      console.log("✅ User document saved to Firestore");
-  
-      Alert.alert("Success", "Signup complete");
+
+      Alert.alert("Success", "Account created! Please log in.");
       navigation.navigate("Login");
-    } catch (error) {
-      console.error("❌ Signup error:", error);
-      Alert.alert("Signup Failed", error.message);
+    } catch (err) {
+      console.error(err.response?.data || err.message);
+      Alert.alert("Signup Failed", "Could not create account");
     }
   };
-  
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Create Account</Text>
+      <Image source={require("../assets/logo.png")} style={styles.logo} />
+      <Text style={styles.title}>Create an Account</Text>
       <TextInput
         style={styles.input}
-        placeholder="Name"
-        value={name}
+        placeholder="Full Name"
+        placeholderTextColor="#999"
         onChangeText={setName}
+        value={name}
       />
       <TextInput
         style={styles.input}
         placeholder="Email"
-        keyboardType="email-address"
-        value={email}
+        placeholderTextColor="#999"
         onChangeText={setEmail}
+        value={email}
+        keyboardType="email-address"
+        autoCapitalize="none"
       />
       <TextInput
         style={styles.input}
         placeholder="Password"
-        secureTextEntry
-        value={password}
+        placeholderTextColor="#999"
         onChangeText={setPassword}
+        value={password}
+        secureTextEntry
       />
       <TouchableOpacity style={styles.button} onPress={handleSignup}>
-        <Text style={styles.buttonText}>Signup</Text>
+        <Text style={styles.buttonText}>Sign Up</Text>
       </TouchableOpacity>
       <TouchableOpacity onPress={() => navigation.navigate("Login")}>
-        <Text style={styles.linkText}>Already have an account? Login</Text>
+        <Text style={styles.link}>Already have an account? Log In</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 40,
-  },
+  container: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20 },
+  logo: { width: 150, height: 150, marginBottom: 20 },
+  title: { fontSize: 24, fontWeight: "bold", marginBottom: 30 },
   input: {
-    width: 300,
-    height: 50,
-    borderColor: "#ccc",
+    width: "100%",
+    padding: 12,
     borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    marginBottom: 20,
+    borderColor: "#ccc",
+    marginBottom: 15,
+    borderRadius: 8,
+    backgroundColor: "#fff",
   },
   button: {
-    width: 300,
-    height: 40,
-    backgroundColor: "#1c1c1c",
-    justifyContent: "center",
+    backgroundColor: "#0A84FF",
+    padding: 14,
+    borderRadius: 8,
+    width: "100%",
     alignItems: "center",
-    borderRadius: 5,
+    marginBottom: 15,
   },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  linkText: {
-    color: "#1c1c1c",
-    marginTop: 20,
-  },
+  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  link: { color: "#0A84FF", fontSize: 14 },
 });

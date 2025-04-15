@@ -14,35 +14,13 @@ import SelectHome from "./screens/SelectHome";
 import AddCategory from "./screens/AddCategory";
 import SplashScreen from "./screens/SplashScreen";
 import ConfigureDevices from "./screens/ConfigureDevices";
-//import FirebaseTest from "./screens/FirebaseTest";
 import AppLayout from "./components/AppLayout";
 import CategoryPage from "./screens/CategoryPage";
 import DevicePage from "./screens/DevicePage";
 import { useEffect } from "react";
-import { getDoc, doc } from "firebase/firestore";
-import { db } from "./firebaseConfig";
 
 const Stack = createStackNavigator();
 export default function App() {
-  useEffect(() => {
-    const testConnection = async () => {
-      try {
-        const docRef = doc(db, "test", "connection");
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-          console.log("✅ Firebase is connected!", docSnap.data());
-        } else {
-          console.log("⚠️ Test document does not exist.");
-        }
-      } catch (error) {
-        console.error("❌ Firebase connection error:", error);
-      }
-    };
-
-    testConnection();
-  }, []);
-
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">

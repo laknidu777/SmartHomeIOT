@@ -15,9 +15,7 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth,db } from "../firebaseConfig";
-import { doc, getDoc } from "firebase/firestore";
+import api, { setAuthToken } from "../utils/api";
 
 export default function Login() {
   const navigation = useNavigation();
@@ -63,49 +61,32 @@ export default function Login() {
     setIsLoading(true);
     try {
       console.log("🔐 Logging in with:", email);
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+      const res = await api.post("/api/users/login", {
+        email,
+        password,
+      });
 
-      // Get the Firebase ID Token
-      const idToken = await user.getIdToken();
-      console.log("🪪 ID Token:", idToken);
-      const userDocRef = doc(db, "users", user.uid);
-      const userSnap = await getDoc(userDocRef);
+      const { token, user } = res.data;
 
-      let name = "User";
-      if (userSnap.exists()) {
-        name = userSnap.data().name || "User";
-      }
+      await AsyncStorage.setItem("token", token);
+      await AsyncStorage.setItem("userId", String(user.id));
+      await AsyncStorage.setItem("email", user.email);
+      await AsyncStorage.setItem("name", user.name);
+      setAuthToken(token);
 
-      // Store the ID token and userId for future authenticated requests
-      await AsyncStorage.setItem("userId", user.uid);
-      await AsyncStorage.setItem("idToken", idToken);
-      await AsyncStorage.setItem("email", user.email); // 👈 This is guaranteed
-      await AsyncStorage.setItem("name", name);  // fetched from Firestore above
-
-
-      // Navigate to the main screen
       navigation.navigate("SelectHome");
-
     } catch (error) {
-      console.error("❌ Login error:", error);
-      let errorMessage = "Login failed. Please check your credentials and try again.";
-      
-      // More specific error messages based on Firebase error codes
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        errorMessage = "Invalid email or password";
-      } else if (error.code === 'auth/too-many-requests') {
-        errorMessage = "Too many failed login attempts. Please try again later.";
-      } else if (error.code === 'auth/network-request-failed') {
-        errorMessage = "Network error. Please check your connection.";
-      }
-      
+      console.error("❌ Login error:", error.response?.data || error.message);
+
+      let errorMessage =
+        error.response?.data?.error ||
+        "Login failed. Please check your credentials and try again.";
+
       Alert.alert("Login Failed", errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
-
   return (
     <SafeAreaView style={styles.mainContainer}>
       <StatusBar barStyle="dark-content" />

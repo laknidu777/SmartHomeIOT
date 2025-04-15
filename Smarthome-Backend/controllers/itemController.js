@@ -1,4 +1,5 @@
 const { firestore } = require("../fireBaseAdmin");
+const { v4: uuidv4 } = require("uuid");
 
 // POST /api/items
 exports.createItem = async (req, res) => {
@@ -10,6 +11,8 @@ exports.createItem = async (req, res) => {
   }
 
   try {
+    const espSecret = uuidv4(); // 🔐 Generate unique secret
+
     const itemRef = firestore
       .collection("users")
       .doc(userId)
@@ -23,6 +26,7 @@ exports.createItem = async (req, res) => {
     const itemData = {
       name,
       espId,
+      espSecret, // 🔐 Save generated UUID
       status,
       createdAt: new Date(),
       homeId,
@@ -30,7 +34,11 @@ exports.createItem = async (req, res) => {
 
     await itemRef.set(itemData);
 
-    res.status(201).json({ message: "Item created", itemId: itemRef.id });
+    res.status(201).json({
+      message: "Item created",
+      itemId: itemRef.id,
+      espSecret, // Return to frontend to display to user
+    });
   } catch (err) {
     console.error("❌ Error creating item:", err);
     res.status(500).json({ error: "Internal server error" });

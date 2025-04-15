@@ -13,8 +13,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { auth } from "../firebaseConfig";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import api from "../utils/api";
 
 export default function SelectHome() {
   const navigation = useNavigation();
@@ -36,23 +36,17 @@ export default function SelectHome() {
     const fetchHomes = async () => {
       setIsLoading(true);
       try {
-        const user = auth.currentUser;
-        if (!user) return;
-
-        const idToken = await user.getIdToken();
-
-        const res = await fetch(`http://192.168.8.141:5000/api/homes`, {
+        const token = await AsyncStorage.getItem("token");
+        const res = await api.get("/api/homes", {
           headers: {
-            Authorization: `Bearer ${idToken}`,
+            Authorization: `Bearer ${token}`,
           },
         });
 
-        const data = await res.json();
-
-        if (res.ok) {
-          setHomes(data.homes);
+        if (res.status === 200) {
+          setHomes(res.data.homes || []);
         } else {
-          console.error("❌ Error loading homes:", data.error);
+          console.error("❌ Error loading homes:", res.data.error);
         }
       } catch (error) {
         console.error("❌ Error fetching homes:", error);
@@ -68,30 +62,24 @@ export default function SelectHome() {
     if (!newHomeName.trim()) return Alert.alert("Enter a valid home name");
 
     try {
-      const user = auth.currentUser;
-      if (!user) return;
+      const token = await AsyncStorage.getItem("token");
+      const res = await api.post(
+        "/api/homes",
+        { name: newHomeName },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-      const idToken = await user.getIdToken();
-
-      const res = await fetch("http://192.168.8.141:5000/api/homes", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name: newHomeName }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        const newHome = { id: data.homeId, name: newHomeName };
+      if (res.status === 201) {
+        const newHome = { id: res.data.homeId, name: newHomeName };
         setHomes([...homes, newHome]);
         setNewHomeName("");
         setModalVisible(false);
       } else {
-        console.error("❌ Home creation failed:", data);
-        Alert.alert("Error", data.error || "Something went wrong");
+        Alert.alert("Error", res.data?.error || "Something went wrong");
       }
     } catch (error) {
       console.error("❌ Error adding home:", error);
@@ -100,7 +88,7 @@ export default function SelectHome() {
   };
 
   const handleHomeSelect = async (home) => {
-    await AsyncStorage.setItem("homeId", home.id);
+    await AsyncStorage.setItem("homeId", String(home.id));
     await AsyncStorage.setItem("homeName", home.name);
     navigation.navigate("Home");
   };
@@ -231,6 +219,9 @@ export default function SelectHome() {
     </View>
   );
 }
+
+// ✅ Your original styles remain untouched from your provided code
+// Paste your full `styles` object here (it already works fine)
 
 const styles = StyleSheet.create({
   mainContainer: {

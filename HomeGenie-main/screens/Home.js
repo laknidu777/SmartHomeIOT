@@ -12,10 +12,12 @@ import {
   Dimensions,
   ActivityIndicator,
 } from 'react-native';
-import { auth } from '../firebaseConfig';
 import StatusRow from '../components/StatusRow';
-import { ref, set } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from '../utils/api';
+import socket from '../utils/socket'; 
+
+
 
 const { height } = Dimensions.get('window');
 
@@ -29,59 +31,102 @@ export default function SmartDashboard() {
   const scrollRef = useRef(null);
   const [roomPositions, setRoomPositions] = useState([]);
 
-  useEffect(() => {
-    fetchCategoriesAndDevices();
-  }, []);
+  // In Home.js
+useEffect(() => {
+  // Add a flag to ensure connection happens only once
+  let isActive = true;
+  
+  const setupConnection = async () => {
+    // 1. Fetch rooms and devices from backend
+    await fetchCategoriesAndDevices();
+  
+    // 2. Establish socket connection once
+    if (isActive) {
+      const socketInstance = socket.connect();
+  
+      // 3. Listen for device status changes
+      socketInstance.on("deviceStatusChange", ({ espId, isOnline }) => {
+        if (isActive) {
+          setDevicesByRoom(prev => {
+            const updated = { ...prev };
+            for (const roomId in updated) {
+              updated[roomId] = updated[roomId].map(device =>
+                device.espId === espId ? { ...device, isOnline } : device
+              );
+            }
+            return updated;
+          });
+        }
+      });
+    }
+  };
+  
+  setupConnection();
+  
+  // 4. Clean up
+  return () => {
+    isActive = false;
+    socket.off("deviceStatusChange");
+    // Don't disconnect here unless you're sure the component is being unmounted
+    // socket.disconnect();
+  };
+}, []);
 
   const fetchCategoriesAndDevices = async () => {
     setLoading(true);
     try {
       const homeId = await AsyncStorage.getItem("homeId");
-      const user = auth.currentUser;
-      if (!user || !homeId) return;
-      const idToken = await user.getIdToken();
-
-      const res = await fetch(`http://192.168.8.141:5000/api/categories?homeId=${homeId}`, {
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-        },
+      const token = await AsyncStorage.getItem("token");
+      if (!token || !homeId) return;
+  
+      const res = await api.get(`/api/rooms/${homeId}`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        console.error("❌ Failed to fetch categories:", data.error);
-        return;
-      }
-
-      const categoryList = data.categories || [];
-      setRooms(categoryList);
-
+  
+      const roomList = res.data || [];
+      setRooms(roomList);
+  
       const devicesData = {};
-      for (const category of categoryList) {
-        const itemRes = await fetch(
-          `http://192.168.8.141:5000/api/items?homeId=${homeId}&categoryId=${category.id}`,
+      for (const room of roomList) {
+        const itemRes = await api.get(
+          `/api/devices/${room.id}`,
           {
-            headers: { Authorization: `Bearer ${idToken}` },
+            headers: { Authorization: `Bearer ${token}` },
           }
         );
-        const itemData = await itemRes.json();
-        if (itemRes.ok) {
-          devicesData[category.id] = itemData.items || [];
+        if (itemRes.status === 200) {
+          devicesData[room.id] = itemRes.data || [];
         }
       }
-
+  
       setDevicesByRoom(devicesData);
     } catch (error) {
-      console.error("Error:", error);
+      console.error("❌ Error fetching rooms/devices:", error);
     } finally {
       setLoading(false);
     }
   };
-
+  
   const toggleDevice = async (device) => {
     try {
+      const token = await AsyncStorage.getItem("token");
       const newStatus = !device.status;
-      await set(ref(rtdb, `device/${device.espId}`), newStatus);
+
+      const res = await api.patch(
+        `/api/devices/toggle/${device.id}`,
+        {
+          message: newStatus ? "Device ON" : "Device OFF",
+          isOn: newStatus,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!res || !res.data) throw new Error("Invalid response");
+
       setDevicesByRoom(prev => {
         const updated = { ...prev };
         const roomId = Object.keys(updated).find(roomId =>
@@ -89,13 +134,14 @@ export default function SmartDashboard() {
         );
         if (roomId) {
           updated[roomId] = updated[roomId].map(d =>
-            d.id === device.id ? { ...d, status: newStatus } : d
+            d.id === device.id ? { ...d, status: res.data.isOn } : d
           );
         }
         return updated;
       });
     } catch (error) {
-      console.error('Failed to toggle device:', error);
+      console.error('❌ Failed to toggle device:', error);
+      Alert.alert("Error", "Failed to toggle device");
     }
   };
 
@@ -197,7 +243,7 @@ export default function SmartDashboard() {
                       <View>
                         <Text style={styles.deviceName}>{device.name}</Text>
                         <Text style={styles.deviceStatus}>
-                          {device.status ? 'Connected' : 'Disconnected'}
+                          {device.isOnline ? 'Online' : 'Offline'}
                         </Text>
                       </View>
                       <View style={styles.deviceControls}>
@@ -260,6 +306,7 @@ export default function SmartDashboard() {
     </View>
   );
 }
+
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,

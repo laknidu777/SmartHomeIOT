@@ -9,22 +9,24 @@ import {
   Modal,
   Pressable,
   Animated,
-  Dimensions
+  Dimensions,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import { useNavigation } from '@react-navigation/native';
 
 export default function Sidebar({ visible, onClose }) {
   const [darkMode, setDarkMode] = useState(false);
   const slideAnimation = new Animated.Value(0);
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
+  const navigation = useNavigation();
 
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const name = await AsyncStorage.getItem('name'); // assuming you store this on signup
+        const name = await AsyncStorage.getItem('name');
         const email = await AsyncStorage.getItem('email');
         if (name) setUserName(name);
         if (email) setUserEmail(email);
@@ -32,10 +34,9 @@ export default function Sidebar({ visible, onClose }) {
         console.error("❌ Failed to load user data:", e);
       }
     };
-  
     fetchUserData();
   }, []);
-  
+
   useEffect(() => {
     if (visible) {
       Animated.timing(slideAnimation, {
@@ -52,7 +53,26 @@ export default function Sidebar({ visible, onClose }) {
     }
   }, [visible]);
 
-  // Transform for sidebar sliding from left
+  const handleLogout = async () => {
+    Alert.alert("Log out", "Are you sure you want to log out?", [
+      {
+        text: "Cancel",
+        style: "cancel"
+      },
+      {
+        text: "Log Out",
+        onPress: async () => {
+          await AsyncStorage.clear();
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "Login" }],
+          });
+        },
+        style: "destructive"
+      }
+    ]);
+  };
+
   const sidebarTranslate = slideAnimation.interpolate({
     inputRange: [0, 1],
     outputRange: [-300, 0]
@@ -62,22 +82,23 @@ export default function Sidebar({ visible, onClose }) {
     <Modal visible={visible} transparent animationType="none">
       <View style={styles.modalContainer}>
         <Pressable style={styles.overlay} onPress={onClose} />
-        
-        <Animated.View 
+
+        <Animated.View
           style={[
-            styles.sidebar, 
-            {transform: [{translateX: sidebarTranslate}]}
+            styles.sidebar,
+            { transform: [{ translateX: sidebarTranslate }] }
           ]}
         >
           {/* Header */}
           <View style={styles.sidebarHeader}>
             <View style={styles.userAvatar}>
-              <Text style={styles.avatarText}>A</Text>
+              <Text style={styles.avatarText}>
+                {userName ? userName.charAt(0).toUpperCase() : "U"}
+              </Text>
             </View>
             <View>
-            <Text style={styles.username}>{userName}</Text>
-            <Text style={styles.email}>{userEmail}</Text>
-
+              <Text style={styles.username}>{userName}</Text>
+              <Text style={styles.email}>{userEmail}</Text>
             </View>
           </View>
 
@@ -108,7 +129,7 @@ export default function Sidebar({ visible, onClose }) {
               <Text style={styles.toggleLabel}>Dark Mode</Text>
               <Switch value={darkMode} onValueChange={setDarkMode} />
             </View>
-            <TouchableOpacity style={styles.logoutButton}>
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
               <Ionicons name="log-out-outline" size={20} color="#e53e3e" />
               <Text style={styles.logoutText}>Log Out</Text>
             </TouchableOpacity>
@@ -132,16 +153,22 @@ const MenuSection = ({ title, children }) => (
 );
 
 const MenuItem = ({ title, icon, active, badge, onPress }) => (
-  <TouchableOpacity 
+  <TouchableOpacity
     style={[styles.menuItem, active && styles.activeItem]}
     onPress={onPress}
   >
-    <Ionicons name={icon} size={24} color={active ? '#4299e1' : '#4a5568'} style={styles.menuIcon} />
+    <Ionicons
+      name={icon}
+      size={24}
+      color={active ? '#4299e1' : '#4a5568'}
+      style={styles.menuIcon}
+    />
     <Text style={[styles.menuText, active && { color: '#4299e1' }]}>{title}</Text>
     {badge && <Text style={styles.badge}>{badge}</Text>}
   </TouchableOpacity>
 );
 
+// (styles remain unchanged — no edits needed)
 const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
