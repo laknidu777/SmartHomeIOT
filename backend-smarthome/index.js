@@ -37,7 +37,9 @@ app.get('/', (req, res) => {
   res.send('Smart Home Backend + WebSocket Ready! 🧠⚡');
 });
 
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+const PORT = 5000;
+const HOST = "192.168.8.141"; // ← bind to LAN IP
+
+server.listen(PORT, HOST, () => {
+  console.log(`🚀 Server running at http://${HOST}:${PORT}`);
 });

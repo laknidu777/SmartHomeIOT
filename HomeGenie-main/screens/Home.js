@@ -16,10 +16,7 @@ import StatusRow from '../components/StatusRow';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../utils/api';
 import socket from '../utils/socket'; 
-
-
-
-const { height } = Dimensions.get('window');
+//const { height } = Dimensions.get('window');
 
 export default function SmartDashboard() {
   const [rooms, setRooms] = useState([]);
@@ -30,47 +27,75 @@ export default function SmartDashboard() {
   const [loading, setLoading] = useState(true);
   const scrollRef = useRef(null);
   const [roomPositions, setRoomPositions] = useState([]);
-
-  // In Home.js
-useEffect(() => {
-  // Add a flag to ensure connection happens only once
-  let isActive = true;
-  
-  const setupConnection = async () => {
-    // 1. Fetch rooms and devices from backend
-    await fetchCategoriesAndDevices();
-  
-    // 2. Establish socket connection once
-    if (isActive) {
-      const socketInstance = socket.connect();
-  
-      // 3. Listen for device status changes
-      socketInstance.on("deviceStatusChange", ({ espId, isOnline }) => {
-        if (isActive) {
-          setDevicesByRoom(prev => {
-            const updated = { ...prev };
-            for (const roomId in updated) {
-              updated[roomId] = updated[roomId].map(device =>
-                device.espId === espId ? { ...device, isOnline } : device
-              );
-            }
-            return updated;
-          });
-        }
-      });
+  const fetchRooms = async () => {
+    try {
+      const homeId = await AsyncStorage.getItem('homeId');
+      const res = await api.get(`/api/rooms/${homeId}`);
+      setRooms(res.data.rooms || []);
+    } catch (err) {
+      console.error("❌ Failed to fetch rooms:", err.message);
+    } finally {
+      setLoading(false);
     }
   };
+  useEffect(() => {
+    let isMounted = true;
+    const timeoutMap = {};
   
-  setupConnection();
+    const initialize = async () => {
+      await fetchCategoriesAndDevices();
   
-  // 4. Clean up
-  return () => {
-    isActive = false;
-    socket.off("deviceStatusChange");
-    // Don't disconnect here unless you're sure the component is being unmounted
-    // socket.disconnect();
-  };
-}, []);
+      const instance = socket.connect();
+      socketRef.current = instance;
+  
+      instance.on("deviceStatusChange", ({ espId, isOnline }) => {
+        if (!isMounted) return;
+  
+        setDevicesByRoom(prev => {
+          const updated = { ...prev };
+          for (const roomId in updated) {
+            updated[roomId] = updated[roomId].map(device =>
+              device.espId === espId ? { ...device, isOnline } : device
+            );
+          }
+          return updated;
+        });
+  
+        // Clear existing timeout for this device
+        if (timeoutMap[espId]) {
+          clearTimeout(timeoutMap[espId]);
+        }
+  
+        // If device is online, auto-set offline after 65s
+        if (isOnline) {
+          timeoutMap[espId] = setTimeout(() => {
+            setDevicesByRoom(prev => {
+              const updated = { ...prev };
+              for (const roomId in updated) {
+                updated[roomId] = updated[roomId].map(device =>
+                  device.espId === espId ? { ...device, isOnline: false } : device
+                );
+              }
+              return updated;
+            });
+          }, 65000);
+        }
+      });
+    };
+  
+    initialize();
+  
+    return () => {
+      isMounted = false;
+      if (socketRef.current) {
+        socketRef.current.off("deviceStatusChange");
+      }
+  
+      // Clear all timeouts
+      Object.values(timeoutMap).forEach(clearTimeout);
+    };
+  }, []);
+  
 
   const fetchCategoriesAndDevices = async () => {
     setLoading(true);
