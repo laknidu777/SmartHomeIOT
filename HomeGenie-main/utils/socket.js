@@ -1,89 +1,52 @@
-import { io } from 'socket.io-client';
+import { io } from "socket.io-client";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 let socket = null;
-let isConnecting = false;
+let reconnectAttempts = 0;
 
-const SOCKET_URL = "http://192.168.8.141:5000"; // ✅ Change to 10.0.2.2 if using Android emulator
+const MAX_RECONNECT_ATTEMPTS = 10;
+const SOCKET_URL = "http://192.168.8.141:5000"; // change if needed
 
-export default {
-  connect: () => {
-    if (socket && socket.connected) {
-      return socket;
+export const connectSocket = async () => {
+  const espId = await AsyncStorage.getItem("espId");
+  if (!espId) return console.warn("No ESP ID in storage");
+
+  if (socket && socket.connected) return socket;
+
+  socket = io(SOCKET_URL, {
+    transports: ["websocket"],
+    reconnection: true,
+    reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
+    reconnectionDelay: 2000,
+    timeout: 10000,
+  });
+
+  socket.on("connect", () => {
+    console.log("🔌 WebSocket connected:", socket.id);
+    socket.emit("registerDevice", { espId });
+    reconnectAttempts = 0;
+  });
+
+  socket.on("disconnect", (reason) => {
+    console.warn("❌ Socket disconnected:", reason);
+  });
+
+  socket.on("connect_error", (err) => {
+    reconnectAttempts++;
+    console.error("🚫 Socket connection error:", err.message);
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      console.warn("❗ Max reconnect attempts reached");
     }
+  });
 
-    if (isConnecting) {
-      console.log("⏳ Socket connection already in progress");
-      return socket;
-    }
+  return socket;
+};
 
-    isConnecting = true;
-    console.log('🌐 Connecting to socket server...');
+export const getSocket = () => socket;
 
-    socket = io(SOCKET_URL, {
-      transports: ['polling', 'websocket'], // ✅ fallback added
-      reconnectionAttempts: 5,
-      reconnectionDelay: 2000,
-      timeout: 10000
-    });
-
-    socket.on('connect', () => {
-      console.log('✅ Socket connected:', socket.id);
-      isConnecting = false;
-    });
-
-    socket.on('disconnect', (reason) => {
-      console.warn(`⚠️ Socket disconnected: ${reason}`);
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error("❌ Socket connect error:", err.message);
-      isConnecting = false;
-    });
-
-    return socket;
-  },
-
-  disconnect: () => {
-    if (socket) {
-      socket.disconnect();
-      socket = null;
-      isConnecting = false;
-    }
-  },
-
-  on: (event, callback) => {
-    if (socket) {
-      socket.on(event, callback);
-    }
-  },
-
-  off: (event) => {
-    if (socket && socket.off) {
-      socket.off(event);
-    }
-  },
-
-  emit: (event, payload) => {
-    if (socket) {
-      socket.emit(event, payload);
-    }
-  },
-
-  testConnection: () => {
-    const testSocket = io(SOCKET_URL, {
-      transports: ['polling', 'websocket'],
-      timeout: 5000
-    });
-
-    testSocket.on('connect', () => {
-      console.log('✅ Test connection successful!');
-      testSocket.disconnect();
-    });
-
-    testSocket.on('connect_error', (err) => {
-      console.error("❌ Test connection failed:", err.message);
-    });
-
-    return testSocket;
+export const disconnectSocket = () => {
+  if (socket) {
+    socket.disconnect();
+    console.log("🔌 Socket disconnected manually");
   }
 };

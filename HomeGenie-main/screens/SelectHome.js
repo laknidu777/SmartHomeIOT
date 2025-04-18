@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../utils/api";
+import socket from "../utils/socket";
 
 export default function SelectHome() {
   const navigation = useNavigation();

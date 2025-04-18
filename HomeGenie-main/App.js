@@ -34,7 +34,6 @@ export default function App() {
             </AppLayout>
           )}
         />
-
         <Stack.Screen
           name="CategoryPage"
           children={({ navigation }) => (
@@ -45,13 +44,12 @@ export default function App() {
         />
         <Stack.Screen
           name="DevicePage"
-          children={({ navigation }) => (
+          children={({ navigation, route }) => (
             <AppLayout navigation={navigation}>
-              <DevicePage />
+              <DevicePage route={route} navigation={navigation} />
             </AppLayout>
           )}
         />
-
         <Stack.Screen name="AddItem" component={AddItem} />
         <Stack.Screen name="AddCategory" component={AddCategory} />
         <Stack.Screen name="ConfigureDevices" component={ConfigureDevices} 

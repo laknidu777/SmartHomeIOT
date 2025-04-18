@@ -4,234 +4,301 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
+  Modal,
+  TextInput,
   Alert,
   ActivityIndicator,
-  Modal,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import Toast from "react-native-toast-message";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import api from "../utils/api";
+import { Picker } from "@react-native-picker/picker"; // 👈 Make sure this is installed
 
-export default function DevicePage({ navigation }) {
+export default function DevicePage() {
   const [devices, setDevices] = useState([]);
-  const [deviceName, setDeviceName] = useState("");
-  const [espId, setEspId] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
+  const [selectedDevice, setSelectedDevice] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [rooms, setRooms] = useState([]);
+  const [form, setForm] = useState({ name: "", espId: "", type: "", roomId: "" });
 
-  const fetchDevices = async () => {
-    setIsLoading(true);
+  const fetchRooms = async () => {
+    const token = await AsyncStorage.getItem("token");
+    const homeId = await AsyncStorage.getItem("homeId");
     try {
-      const homeId = await AsyncStorage.getItem("homeId");
-      const token = await AsyncStorage.getItem("idToken");
-
-      const response = await fetch(
-        `http://192.168.8.141:5000/api/items/all/?homeId=${homeId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const data = await response.json();
-      if (data.items) {
-        setDevices(data.items);
-      } else {
-        console.warn("No devices returned");
-      }
+      const res = await api.get(`/api/rooms/${homeId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setRooms(res.data);
     } catch (err) {
-      console.error("Error fetching all devices:", err);
-    } finally {
-      setIsLoading(false);
+      console.error("❌ Failed to fetch rooms:", err);
     }
   };
 
-  const handleAddDevice = async () => {
-    if (!deviceName.trim() || !espId.trim() || !categoryId.trim()) {
-      Alert.alert("All fields are required (Name, ESP ID, Category ID)");
-      return;
-    }
+  const fetchDevices = async () => {
     try {
-      const token = await AsyncStorage.getItem("idToken");
-      const homeId = await AsyncStorage.getItem("homeId");
-
-      const response = await fetch("http://192.168.8.141:5000/api/items", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          homeId,
-          categoryId,
-          name: deviceName,
-          espId,
-        }),
+      setLoading(true);
+      const token = await AsyncStorage.getItem("token");
+      const res = await api.get("/api/devices/all", {
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        Alert.alert("✅ Device added");
-        setDeviceName("");
-        setEspId("");
-        setCategoryId("");
-        setModalVisible(false);
-        fetchDevices(); // Refresh
-      } else {
-        console.error("Failed to add device:", data);
-        Alert.alert("❌ Failed to add device");
-      }
+      setDevices(res.data);
     } catch (err) {
-      console.error("Error adding device:", err);
-      Alert.alert("Error adding device");
+      console.error("❌ Failed to fetch devices:", err);
+      Toast.show({ type: "error", text1: "Failed to load devices" });
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchDevices();
+    fetchRooms();
   }, []);
 
-  const LoadingAnimation = () => (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#4299e1" />
-      <Text style={styles.loadingText}>Loading devices...</Text>
-    </View>
-  );
+  const openAddModal = () => {
+    setSelectedDevice(null);
+    setForm({ name: "", espId: "", type: "", roomId: "" });
+    setModalVisible(true);
+  };
+
+  const openEditModal = (device) => {
+    setSelectedDevice(device);
+    setForm({ name: device.name, espId: device.espId, type: device.type, roomId: device.roomId });
+    setModalVisible(true);
+  };
+
+  const updateDevice = async () => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      const url = selectedDevice
+        ? `/api/devices/update/${selectedDevice.id}`
+        : "/api/devices";
+      const method = selectedDevice ? "put" : "post";
+
+      const res = await api[method](url, form, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      Toast.show({ type: "success", text1: selectedDevice ? "Device updated" : "Device added" });
+      setModalVisible(false);
+      fetchDevices();
+    } catch (err) {
+      console.error("❌ Save error:", err);
+      Toast.show({ type: "error", text1: "Failed to save device" });
+    }
+  };
+
+  const confirmDelete = (device) => {
+    Alert.alert("Delete Device", `Are you sure to delete ${device.name}?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => deleteDevice(device),
+      },
+    ]);
+  };
+
+  const deleteDevice = async (device) => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      await api.delete(`/api/devices/delete/${device.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      Toast.show({ type: "success", text1: "Device deleted" });
+      fetchDevices();
+    } catch (err) {
+      console.error("❌ Delete error:", err);
+      Toast.show({ type: "error", text1: "Failed to delete device" });
+    }
+  };
+
+  const handleChange = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4299e1" />
+        <Text style={styles.loadingText}>Loading devices...</Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={styles.container}>
-        {isLoading ? (
-          <LoadingAnimation />
-        ) : (
-          <>
-            <Text style={styles.title}>All Devices</Text>
-            <View style={styles.grid}>
-              {devices.map((device) => (
-                <View key={device.id} style={styles.tile}>
-                  <Text style={styles.tileText}>{device.name}</Text>
-                  <Text style={styles.espText}>ESP ID: {device.espId}</Text>
-                  <Text style={styles.status}>
-                    {device.status ? "🟢 Online" : "🔴 Offline"}
-                  </Text>
-                </View>
-              ))}
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Your Devices</Text>
+
+        {devices.map((device) => (
+          <View key={device.id} style={styles.deviceCard}>
+            <View style={styles.deviceInfo}>
+              <Text style={styles.deviceName}>{device.name}</Text>
+              <Text style={styles.deviceDetails}>ESP ID: {device.espId}</Text>
+              <Text style={styles.deviceDetails}>Type: {device.type}</Text>
             </View>
-          </>
-        )}
+            <View style={styles.actions}>
+              <TouchableOpacity onPress={() => openEditModal(device)}>
+                <Ionicons name="create-outline" size={24} color="#4299e1" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => confirmDelete(device)}>
+                <Ionicons name="trash-outline" size={24} color="#e53e3e" style={{ marginLeft: 16 }} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))}
       </ScrollView>
 
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => setModalVisible(true)}
-      >
+      {/* ➕ Floating Add Button */}
+      <TouchableOpacity style={styles.fab} onPress={openAddModal}>
         <Text style={styles.fabText}>＋</Text>
       </TouchableOpacity>
 
-      {/* Add Device Modal */}
-      <Modal
-        visible={modalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setModalVisible(false)}
-      >
+      {/* Modal */}
+      <Modal animationType="slide" transparent={true} visible={modalVisible}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>Add New Device</Text>
+            <Text style={styles.modalTitle}>
+              {selectedDevice ? "Edit Device" : "Add Device"}
+            </Text>
 
             <TextInput
               placeholder="Device Name"
-              value={deviceName}
-              onChangeText={setDeviceName}
               style={styles.input}
-              placeholderTextColor="#a0aec0"
+              value={form.name}
+              onChangeText={(text) => handleChange("name", text)}
             />
             <TextInput
               placeholder="ESP ID"
-              value={espId}
-              onChangeText={setEspId}
               style={styles.input}
-              placeholderTextColor="#a0aec0"
+              value={form.espId}
+              onChangeText={(text) => handleChange("espId", text)}
             />
             <TextInput
-              placeholder="Category ID"
-              value={categoryId}
-              onChangeText={setCategoryId}
+              placeholder="Type"
               style={styles.input}
-              placeholderTextColor="#a0aec0"
+              value={form.type}
+              onChangeText={(text) => handleChange("type", text)}
             />
 
-            <View style={styles.modalButtonContainer}>
-              <TouchableOpacity
-                style={styles.modalCancelButton}
-                onPress={() => setModalVisible(false)}
+            <View style={styles.pickerWrapper}>
+              <Picker
+                selectedValue={form.roomId}
+                onValueChange={(value) => handleChange("roomId", value)}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Picker.Item label="Select Room" value="" />
+                {rooms.map((room) => (
+                  <Picker.Item key={room.id} label={room.name} value={room.id} />
+                ))}
+              </Picker>
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
+                <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalSaveButton}
-                onPress={handleAddDevice}
-              >
-                <Text style={styles.modalSaveText}>Add</Text>
+              <TouchableOpacity style={styles.saveButton} onPress={updateDevice}>
+                <Text style={styles.saveText}>
+                  {selectedDevice ? "Update" : "Add"}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+
+      <Toast />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    backgroundColor: "#f5f5f5",
-    flexGrow: 1,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "bold",
-    marginBottom: 15,
-    textAlign: "center",
-  },
-  grid: {
+  container: { flex: 1, backgroundColor: "#f5f7fb" },
+  content: { padding: 20 },
+  title: { fontSize: 24, fontWeight: "bold", marginBottom: 16, color: "#2d3748" },
+  deviceCard: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    elevation: 2,
     flexDirection: "row",
-    flexWrap: "wrap",
     justifyContent: "space-between",
-  },
-  tile: {
-    width: "48%",
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 20,
-    marginBottom: 15,
     alignItems: "center",
-    elevation: 3,
   },
-  tileText: {
-    fontSize: 16,
+  deviceInfo: { flex: 1 },
+  deviceName: { fontSize: 18, fontWeight: "600", color: "#2d3748" },
+  deviceDetails: { color: "#718096", fontSize: 14 },
+  actions: { flexDirection: "row", alignItems: "center" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "#00000088",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContainer: {
+    width: "85%",
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 20,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 20,
     fontWeight: "600",
-    marginBottom: 5,
+    marginBottom: 16,
+    color: "#2d3748",
   },
-  espText: {
-    fontSize: 12,
-    color: "#555",
-    marginBottom: 5,
+  input: {
+    backgroundColor: "#f7fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 12,
+    color: "#2d3748",
   },
-  status: {
-    fontSize: 14,
-    color: "#666",
+  pickerWrapper: {
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 8,
+    marginBottom: 12,
   },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+  },
+  cancelButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderColor: "#e2e8f0",
+    borderWidth: 1,
+    backgroundColor: "#f7fafc",
+    width: "48%",
+    alignItems: "center",
+  },
+  cancelText: { color: "#718096", fontWeight: "600" },
+  saveButton: {
+    backgroundColor: "#4299e1",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    width: "48%",
+    alignItems: "center",
+  },
+  saveText: { color: "white", fontWeight: "600" },
   loadingContainer: {
     flex: 1,
-    alignItems: "center",
     justifyContent: "center",
-    paddingTop: 100,
-    paddingBottom: 100,
+    alignItems: "center",
+    backgroundColor: "#f5f7fb",
   },
   loadingText: {
     marginTop: 12,
@@ -243,82 +310,18 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 24,
     right: 24,
-    backgroundColor: "#06b6d4", // cyan
+    backgroundColor: "#06b6d4",
     width: 56,
     height: 56,
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
     elevation: 6,
   },
-  
   fabText: {
     color: "white",
     fontSize: 28,
     fontWeight: "bold",
     marginTop: -1,
-  },  
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContainer: {
-    backgroundColor: "white",
-    width: "85%",
-    padding: 20,
-    borderRadius: 12,
-    elevation: 5,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 15,
-    color: "#2d3748",
-    textAlign: "center",
-  },
-  input: {
-    height: 45,
-    borderColor: "#ccc",
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    backgroundColor: "#fff",
-    marginBottom: 10,
-    color: "#2d3748",
-  },
-  modalButtonContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 10,
-  },
-  modalCancelButton: {
-    backgroundColor: "#e2e8f0",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    width: "48%",
-    alignItems: "center",
-  },
-  modalCancelText: {
-    color: "#2d3748",
-    fontWeight: "600",
-  },
-  modalSaveButton: {
-    backgroundColor: "#06b6d4",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    width: "48%",
-    alignItems: "center",
-  },
-  modalSaveText: {
-    color: "#fff",
-    fontWeight: "600",
   },
 });

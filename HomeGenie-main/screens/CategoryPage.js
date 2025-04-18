@@ -11,140 +11,166 @@ import {
   ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Toast from "react-native-toast-message";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function CategoryPage({ navigation }) {
-  const [categories, setCategories] = useState([]);
-  const [categoryName, setCategoryName] = useState("");
+  const [rooms, setRooms] = useState([]);
+  const [roomName, setRoomName] = useState("");
+  const [editingRoom, setEditingRoom] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchCategories = async () => {
+  const fetchRooms = async () => {
     setIsLoading(true);
     try {
       const homeId = await AsyncStorage.getItem("homeId");
-      const token = await AsyncStorage.getItem("idToken");
-
-      const response = await fetch(
-        `http://192.168.8.141:5000/api/categories?homeId=${homeId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
+      const token = await AsyncStorage.getItem("token");
+      const response = await fetch(`http://192.168.8.141:5000/api/rooms/${homeId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await response.json();
-      if (data.categories) {
-        setCategories(data.categories);
+      if (response.ok) {
+        setRooms(data);
       } else {
-        console.warn("No categories returned");
+        console.warn("No rooms returned:", data);
       }
     } catch (err) {
-      console.error("Error fetching categories:", err);
+      console.error("Error fetching rooms:", err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleAddCategory = async () => {
-    if (!categoryName.trim()) {
-      Alert.alert("Please enter a category name");
-      return;
-    }
+  const handleSaveRoom = async () => {
+    const token = await AsyncStorage.getItem("token");
+    const homeId = await AsyncStorage.getItem("homeId");
+    if (!roomName.trim()) return Alert.alert("Room name is required");
 
     try {
-      const token = await AsyncStorage.getItem("idToken");
-      const homeId = await AsyncStorage.getItem("homeId");
+      const method = editingRoom ? "PUT" : "POST";
+      const url = editingRoom
+        ? `http://192.168.8.141:5000/api/rooms/${editingRoom.id}`
+        : "http://192.168.8.141:5000/api/rooms";
 
-      const response = await fetch("http://192.168.8.141:5000/api/categories", {
-        method: "POST",
+      const res = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          homeId,
-          name: categoryName,
-        }),
+        body: JSON.stringify({ name: roomName, homeId }),
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        Alert.alert("✅ Category added");
-        setCategoryName("");
+      const data = await res.json();
+      if (res.ok) {
+        Toast.show({
+          type: "success",
+          text1: `Room ${editingRoom ? "updated" : "added"} successfully`,
+        });
         setModalVisible(false);
-        fetchCategories(); // Refresh list
+        setRoomName("");
+        setEditingRoom(null);
+        fetchRooms();
       } else {
-        console.error("Failed to add category:", data);
-        Alert.alert("❌ Failed to add category");
+        Alert.alert("Failed to save room", data?.error || "Unknown error");
       }
     } catch (err) {
-      console.error("Error adding category:", err);
-      Alert.alert("Error adding category");
+      console.error("Save error:", err);
+      Alert.alert("Error", "Failed to save room");
     }
   };
 
+  const handleDeleteRoom = async (roomId) => {
+    const token = await AsyncStorage.getItem("token");
+    Alert.alert("Confirm Delete", "Are you sure you want to delete this room?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            const res = await fetch(`http://192.168.8.141:5000/api/rooms/${roomId}`, {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+              Toast.show({ type: "success", text1: "Room deleted successfully" });
+              fetchRooms();
+            } else {
+              Alert.alert("Delete failed", "Could not delete room");
+            }
+          } catch (err) {
+            console.error("Delete error:", err);
+            Alert.alert("Error", "Failed to delete room");
+          }
+        },
+      },
+    ]);
+  };
+
   useEffect(() => {
-    fetchCategories();
+    fetchRooms();
   }, []);
 
-  const LoadingAnimation = () => (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#06b6d4" />
-      <Text style={styles.loadingText}>Loading categories...</Text>
-    </View>
-  );
+  const openEditModal = (room) => {
+    setEditingRoom(room);
+    setRoomName(room.name);
+    setModalVisible(true);
+  };
+
+  const openAddModal = () => {
+    setEditingRoom(null);
+    setRoomName("");
+    setModalVisible(true);
+  };
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: "#f5f7fb" }}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>Categories</Text>
+        <Text style={styles.title}>Rooms</Text>
 
         {isLoading ? (
-          <LoadingAnimation />
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#06b6d4" />
+            <Text style={styles.loadingText}>Loading rooms...</Text>
+          </View>
         ) : (
           <View style={styles.grid}>
-            {categories.map((cat) => (
-              <TouchableOpacity
-                key={cat.id}
-                style={styles.tile}
-                onPress={() =>
-                  navigation.navigate("Home", {
-                    categoryId: cat.id,
-                    categoryName: cat.name,
-                  })
-                }
-              >
-                <Text style={styles.tileText}>{cat.name}</Text>
-              </TouchableOpacity>
+            {rooms.map((room) => (
+              <View key={room.id} style={styles.tile}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.tileText}>{room.name}</Text>
+                </View>
+                <View style={styles.actionsRow}>
+                  <TouchableOpacity onPress={() => openEditModal(room)}>
+                    <Ionicons name="create-outline" size={22} color="#4299e1" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDeleteRoom(room.id)}>
+                    <Ionicons name="trash-outline" size={22} color="#e53e3e" />
+                  </TouchableOpacity>
+                </View>
+              </View>
             ))}
           </View>
         )}
       </ScrollView>
 
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => setModalVisible(true)}
-      >
-        <Text style={styles.fabText}>＋</Text>
+      <TouchableOpacity style={styles.fab} onPress={openAddModal}>
+        <Ionicons name="add" size={28} color="white" />
       </TouchableOpacity>
 
-      {/* Modal for Add Category */}
-      <Modal
-        visible={modalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
-      >
+      {/* Modal */}
+      <Modal visible={modalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>New Category</Text>
+            <Text style={styles.modalTitle}>
+              {editingRoom ? "Edit Room" : "New Room"}
+            </Text>
             <TextInput
-              placeholder="Enter category name"
-              value={categoryName}
-              onChangeText={setCategoryName}
+              placeholder="Enter room name"
+              value={roomName}
+              onChangeText={setRoomName}
               style={styles.modalInput}
               placeholderTextColor="#a0aec0"
             />
@@ -155,16 +181,16 @@ export default function CategoryPage({ navigation }) {
               >
                 <Text style={{ color: "#718096" }}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={handleAddCategory}
-              >
-                <Text style={{ color: "white" }}>Add</Text>
+              <TouchableOpacity style={styles.saveButton} onPress={handleSaveRoom}>
+                <Text style={{ color: "white" }}>
+                  {editingRoom ? "Update" : "Add"}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+      <Toast />
     </View>
   );
 }
@@ -178,8 +204,9 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: "bold",
-    marginBottom: 15,
+    marginBottom: 20,
     textAlign: "center",
+    color: "#2d3748",
   },
   grid: {
     flexDirection: "row",
@@ -189,22 +216,27 @@ const styles = StyleSheet.create({
   tile: {
     width: "48%",
     backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 20,
-    marginBottom: 15,
-    alignItems: "center",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
     elevation: 3,
+    justifyContent: "space-between",
+    height: 110,
   },
   tileText: {
     fontSize: 16,
     fontWeight: "600",
+    color: "#2d3748",
+    marginBottom: 12,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   loadingContainer: {
-    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 100,
-    paddingBottom: 100,
+    padding: 40,
   },
   loadingText: {
     marginTop: 12,
@@ -214,25 +246,15 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    bottom: 24,
-    right: 24,
-    backgroundColor: "#06b6d4", // cyan
+    bottom: 30,
+    right: 30,
+    backgroundColor: "#06b6d4",
     width: 56,
     height: 56,
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
     elevation: 6,
-  },
-  fabText: {
-    color: "white",
-    fontSize: 28,
-    fontWeight: "bold",
-    marginTop: -1,
   },
   modalOverlay: {
     flex: 1,
@@ -253,11 +275,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   modalInput: {
-    borderColor: "#ccc",
+    borderColor: "#e2e8f0",
     borderWidth: 1,
-    padding: 10,
+    padding: 12,
     borderRadius: 8,
     marginBottom: 16,
+    fontSize: 16,
     color: "#2d3748",
   },
   modalButtons: {
@@ -274,7 +297,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   saveButton: {
-    backgroundColor: "#06b6d4", // cyan
+    backgroundColor: "#06b6d4",
     padding: 12,
     borderRadius: 8,
     flex: 1,
