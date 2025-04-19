@@ -1,4 +1,3 @@
-// App.js
 import "react-native-gesture-handler";
 //import { StatusBar } from "expo-status-bar";
 import { NavigationContainer } from "@react-navigation/native";
@@ -8,17 +7,13 @@ import Login from "./screens/Login";
 import Signup from "./screens/Signup";
 import Home from "./screens/Home";
 import User from "./screens/User";
-import AddItem from "./screens/AddItem";
-import SelectVehicle from "./screens/SelectHome";
 import SelectHome from "./screens/SelectHome";
-import AddCategory from "./screens/AddCategory";
 import SplashScreen from "./screens/SplashScreen";
 import ConfigureDevices from "./screens/ConfigureDevices";
 import AppLayout from "./components/AppLayout";
 import CategoryPage from "./screens/CategoryPage";
-import DevicePage from "./screens/DevicePage";
-import { useEffect } from "react";
-
+import DevicePage from "./screens/DevicePage"
+import SupportPage from "./screens/SupportPage";
 const Stack = createStackNavigator();
 export default function App() {
   return (
@@ -50,15 +45,22 @@ export default function App() {
             </AppLayout>
           )}
         />
-        <Stack.Screen name="AddItem" component={AddItem} />
-        <Stack.Screen name="AddCategory" component={AddCategory} />
+        <Stack.Screen
+          name="SupportPage"
+          children={({ navigation, route }) => (
+            <AppLayout navigation={navigation}>
+              <SupportPage route={route} navigation={navigation} />
+            </AppLayout>
+          )}
+        />
+        
         <Stack.Screen name="ConfigureDevices" component={ConfigureDevices} 
         options={{ headerShown: false }}
         />
         <Stack.Screen name="User" component={User} />
         <Stack.Screen name="Signup" component={Signup} />
         <Stack.Screen name="SelectHome" component={SelectHome} />
-        <Stack.Screen name="SelectVehicle" component={SelectVehicle} />
+        
   
       </Stack.Navigator>
     </NavigationContainer>

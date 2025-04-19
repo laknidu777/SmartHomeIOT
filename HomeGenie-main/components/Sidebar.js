@@ -107,7 +107,9 @@ export default function Sidebar({ visible, onClose }) {
             <MenuSection title="Main">
               <MenuItem title="Dashboard" icon="grid-outline" active />
               <MenuItem title="Rooms" icon="home-outline" />
-              <MenuItem title="Devices" icon="bulb-outline" badge="3" />
+              <MenuItem title="Devices" icon="bulb-outline" badge="3" 
+                onPress={() => navigation.navigate("DevicePage")}>
+              </MenuItem>
               <MenuItem title="Settings" icon="settings-outline" />
             </MenuSection>
 
@@ -118,7 +120,9 @@ export default function Sidebar({ visible, onClose }) {
             </MenuSection>
 
             <MenuSection title="Support">
-              <MenuItem title="Help Center" icon="help-circle-outline" />
+              <MenuItem title="Help Center" icon="help-circle-outline"badge="3" 
+                onPress={() => navigation.navigate("SupportPage")}>
+              </MenuItem>
               <MenuItem title="Contact Us" icon="mail-outline" />
             </MenuSection>
           </ScrollView>

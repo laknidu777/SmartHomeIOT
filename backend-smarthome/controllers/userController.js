@@ -58,3 +58,11 @@ export const login = async (req, res) => {
     res.status(500).json({ error: 'Server error during login' });
   }
 };
+export const logout = async (req, res) => {
+  try {
+    res.status(200).json({ message: 'Logout successful. Token should be cleared on the client.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error during logout' });
+  }
+};
