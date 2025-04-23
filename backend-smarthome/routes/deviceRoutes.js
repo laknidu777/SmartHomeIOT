@@ -5,6 +5,7 @@ import { createDevice, getDevicesByRoom,toggleDevice,getAllDevicesForUser,
 import { authenticate } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+router.post('/:espId/offline', markDeviceOffline);
 router.use(authenticate);
 router.post('/', createDevice);
 router.get('/all', getAllDevicesForUser);
@@ -13,6 +14,4 @@ router.delete('/delete/:id', deleteDevice);
 router.get('/:roomId', getDevicesByRoom);
 router.patch('/toggle/:id', toggleDevice);
 router.post('/:espId/assign-hub', assignDeviceToHub);
-router.post('/:espId/offline', markDeviceOffline);
-
 export default router;
