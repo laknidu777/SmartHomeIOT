@@ -185,3 +185,47 @@ export const deleteDevice = async (req, res) => {
     res.status(500).json({ error: 'Failed to delete device' });
   }
 };
+export const assignDeviceToHub = async (req, res) => {
+  const { espId } = req.params;
+  const { hubId, hubSsid, hubPassword } = req.body;
+
+  try {
+    const device = await Device.findOne({ where: { espId } });
+    if (!device) return res.status(404).json({ message: 'Device not found' });
+
+    // Save hub assignment
+    device.assignedHubId = hubId;
+    device.hubSsid = hubSsid;
+    device.hubPassword = hubPassword;
+    await device.save();
+
+    // Tell the device to switch networks via WebSocket
+    
+    const command = `ASSIGN:${hubSsid},${hubPassword}`;
+    sendCommandToDevice(espId, command);
+
+    res.json({ message: `Device ${espId} assigned to hub ${hubId}` });
+  } catch (err) {
+    console.error('❌ assignDeviceToHub error:', err.message);
+    res.status(500).json({ message: 'Internal error' });
+  }
+};
+export const markDeviceOffline = async (req, res) => {
+  const { espId } = req.params;
+
+  try {
+    const device = await Device.findOne({ where: { espId } });
+    if (!device) return res.status(404).json({ message: 'Device not found' });
+
+    if (device.isOnline) {
+      await Device.update({ isOnline: false }, { where: { espId } });
+      req.io.emit('deviceStatusChange', { espId, isOnline: false });
+      console.log(`💤 [Hub] Device ${espId} marked offline`);
+    }
+
+    res.status(200).json({ message: 'Device marked offline' });
+  } catch (err) {
+    console.error("❌ markDeviceOffline error:", err.message);
+    res.status(500).json({ message: 'Internal error' });
+  }
+};

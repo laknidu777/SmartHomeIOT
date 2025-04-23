@@ -14,7 +14,8 @@ import { Ionicons } from "@expo/vector-icons";
 import Toast from "react-native-toast-message";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../utils/api";
-import { Picker } from "@react-native-picker/picker"; // 👈 Make sure this is installed
+import { Picker } from "@react-native-picker/picker";
+
 
 export default function DevicePage() {
   const [devices, setDevices] = useState([]);
@@ -196,7 +197,6 @@ export default function DevicePage() {
                 ))}
               </Picker>
             </View>
-
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
                 <Text style={styles.cancelText}>Cancel</Text>
