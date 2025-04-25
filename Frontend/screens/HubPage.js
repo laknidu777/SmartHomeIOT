@@ -11,190 +11,217 @@ import axios from "axios";
 const API = "http://192.168.8.141:5000/api";
 
 export default function HubPage() {
-  const [hubId, setHubId] = useState("");
+  const [homeId, setHomeId] = useState(null);
+  const [hubs, setHubs] = useState([]);
+  const [selectedHub, setSelectedHub] = useState(null);
+
   const [assignedDevices, setAssignedDevices] = useState([]);
   const [unassignedDevices, setUnassignedDevices] = useState([]);
   const [activeTab, setActiveTab] = useState("assigned");
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedDevice, setSelectedDevice] = useState(null);
-  const [deviceName, setDeviceName] = useState("");
-  const [deviceType, setDeviceType] = useState("");
+
+  const [hubName, setHubName] = useState("");
   const [hubSsid, setHubSsid] = useState("");
   const [hubPassword, setHubPassword] = useState("");
+  const [hubIdInput, setHubIdInput] = useState("");
 
+  const getAuthAxios = async () => {
+    const token = await AsyncStorage.getItem("token");
+    return axios.create({
+      baseURL: API,
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+  };
 
   useEffect(() => {
-    const loadHubIdAndDevices = async () => {
-      const storedHubId = await AsyncStorage.getItem("hubId");
-      setHubId(storedHubId);
-      await fetchDevices(storedHubId);
+    const load = async () => {
+      const storedHomeId = await AsyncStorage.getItem("homeId");
+      setHomeId(storedHomeId);
+      await fetchAll(storedHomeId);
     };
-
-    loadHubIdAndDevices();
+    load();
   }, []);
-  const fetchHubDetails = async (hubId) => {
-    try {
-      const res = await axios.get(`${API}/hubs/${hubId}`);
-      setHubSsid(res.data.ssid);
-      setHubPassword(res.data.password);
-    } catch {
-      Toast.show({ type: "error", text1: "Failed to load hub info" });
-    }
-  };
-  
-  const fetchDevices = async (hubId) => {
+
+  const fetchAll = async (homeId) => {
     try {
       setLoading(true);
-      const assigned = await axios.get(`${API}/hubs/${hubId}/devices`);
-      const all = await axios.get(`${API}/devices`);
-      const unassigned = all.data.filter(d => d.assignedHubId === null);
+      const api = await getAuthAxios();
 
-      setAssignedDevices(assigned.data);
-      setUnassignedDevices(unassigned);
+      const [hubRes, unassignedRes] = await Promise.all([
+        api.get(`/hubs/by-home/${homeId}`),
+        api.get(`/hubs/unassigned/${homeId}`)
+      ]);
+
+      setHubs(hubRes.data);
+      setUnassignedDevices(unassignedRes.data);
+
+      if (hubRes.data.length > 0) {
+        setSelectedHub(hubRes.data[0]);
+        fetchDevicesByHub(hubRes.data[0].hubId);
+      }
+
     } catch (err) {
-      Toast.show({ type: "error", text1: "Failed to load devices" });
+      console.error(err);
+      Toast.show({ type: "error", text1: "Failed to load hub data" });
     } finally {
       setLoading(false);
     }
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchDevices(hubId);
-    setRefreshing(false);
-  };
-
-  const handleAssign = async (device) => {
+  const fetchDevicesByHub = async (hubId) => {
     try {
-      await axios.post(`${API}/devices/${device.espId}/assign-hub`, {
-        hubId,
-        hubSsid: "CentralHub-Setup",
-        hubPassword: "12345678",
-      });
-      Toast.show({ type: "success", text1: "Device assigned to hub" });
-      await fetchDevices(hubId);
-    } catch {
-      Toast.show({ type: "error", text1: "Assignment failed" });
+      const api = await getAuthAxios();
+      const res = await api.get(`/hubs/${hubId}/devices`);
+      setAssignedDevices(res.data);
+    } catch (err) {
+      console.error(err);
+      Toast.show({ type: "error", text1: "Failed to load assigned devices" });
     }
   };
 
-  const handleDelete = async (espId) => {
-    Alert.alert("Unassign Device", "Are you sure?", [
-      { text: "Cancel" },
+  const refresh = () => {
+    if (homeId) fetchAll(homeId);
+  };
+
+  const assignDevice = async (espId) => {
+    try {
+      const api = await getAuthAxios();
+      await api.put(`/hubs/${selectedHub.hubId}/devices/${espId}`);
+      Toast.show({ type: "success", text1: "Device assigned!" });
+      refresh();
+    } catch (err) {
+      Toast.show({ type: "error", text1: "Failed to assign device" });
+    }
+  };
+
+  const unassignDevice = async (espId) => {
+    try {
+      const api = await getAuthAxios();
+      await api.delete(`/hubs/${selectedHub.hubId}/devices/${espId}`);
+      Toast.show({ type: "success", text1: "Device unassigned!" });
+      refresh();
+    } catch (err) {
+      Toast.show({ type: "error", text1: "Failed to unassign device" });
+    }
+  };
+
+  const submitNewHub = async () => {
+    try {
+      const api = await getAuthAxios();
+      await api.post(`/hubs/register`, {
+        hubId: hubIdInput,
+        name: hubName,
+        ssid: hubSsid,
+        password: hubPassword,
+        homeId
+      });
+      Toast.show({ type: "success", text1: "Hub created!" });
+      setModalVisible(false);
+      refresh();
+    } catch (err) {
+      Toast.show({ type: "error", text1: "Failed to create hub" });
+    }
+  };
+
+  const deleteHub = async () => {
+    Alert.alert("Delete Hub", "Are you sure?", [
+      { text: "Cancel", style: "cancel" },
       {
-        text: "Yes",
-        onPress: async () => {
+        text: "Delete", onPress: async () => {
           try {
-            await axios.delete(`${API}/hubs/${hubId}/devices/${espId}`);
-            Toast.show({ type: "success", text1: "Device unassigned" });
-            await fetchDevices(hubId);
-          } catch {
-            Toast.show({ type: "error", text1: "Failed to unassign" });
+            const api = await getAuthAxios();
+            await api.delete(`/hubs/${selectedHub.hubId}`);
+            Toast.show({ type: "success", text1: "Hub deleted!" });
+            setSelectedHub(null);
+            refresh();
+          } catch (err) {
+            Toast.show({ type: "error", text1: "Failed to delete hub" });
           }
-        },
-      },
+        }
+      }
     ]);
   };
 
-  const handleEdit = (device) => {
-    setSelectedDevice(device);
-    setDeviceName(device.name);
-    setDeviceType(device.type);
-    setModalVisible(true);
-  };
-
-  const handleUpdate = async () => {
-    try {
-      await axios.put(`${API}/hubs/${hubId}/devices/${selectedDevice.espId}`, {
-        name: deviceName,
-        type: deviceType,
-      });
-      Toast.show({ type: "success", text1: "Device updated" });
-      setModalVisible(false);
-      await fetchDevices(hubId);
-    } catch {
-      Toast.show({ type: "error", text1: "Update failed" });
-    }
-  };
-
-  const renderDevice = (device, isAssigned = true) => (
-    <View key={device.espId} style={styles.card}>
-      <Text style={styles.cardTitle}>{device.name || "Unnamed Device"}</Text>
-      <Text>ESP: {device.espId}</Text>
-      <Text>Type: {device.type}</Text>
-
-      <View style={styles.cardActions}>
-        {isAssigned ? (
-          <>
-            <TouchableOpacity onPress={() => handleEdit(device)}>
-              <Ionicons name="create-outline" size={22} color="black" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleDelete(device.espId)}>
-              <Ionicons name="trash-outline" size={22} color="red" />
-            </TouchableOpacity>
-          </>
-        ) : (
-          <TouchableOpacity onPress={() => handleAssign(device)}>
-            <Ionicons name="add-circle-outline" size={22} color="green" />
-          </TouchableOpacity>
-        )}
-      </View>
+  // ✅ Define DeviceCard component to fix the error
+  const DeviceCard = ({ device, assigned }) => (
+    <View style={styles.deviceCard}>
+      <Text style={styles.deviceText}>{device.name} ({device.espId})</Text>
+      <TouchableOpacity
+        style={styles.assignButton}
+        onPress={() => assigned ? unassignDevice(device.espId) : assignDevice(device.espId)}
+      >
+        <Text style={{ color: "white" }}>{assigned ? "Unassign" : "Assign"}</Text>
+      </TouchableOpacity>
     </View>
   );
 
-  if (loading) {
-    return <ActivityIndicator style={{ flex: 1 }} size="large" color="#000" />;
-  }
-
   return (
     <View style={styles.container}>
-      <View style={styles.tabContainer}>
-        <TouchableOpacity onPress={() => setActiveTab("assigned")} style={[styles.tab, activeTab === "assigned" && styles.tabActive]}>
-          <Text style={styles.tabText}>Assigned Devices</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setActiveTab("unassigned")} style={[styles.tab, activeTab === "unassigned" && styles.tabActive]}>
-          <Text style={styles.tabText}>Unassigned Devices</Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        {activeTab === "assigned" ? assignedDevices.map(d => renderDevice(d)) : unassignedDevices.map(d => renderDevice(d, false))}
-      </ScrollView>
-
-      <Modal visible={modalVisible} transparent animationType="slide">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text>Edit Device</Text>
-            <TextInput value={deviceName} onChangeText={setDeviceName} placeholder="Name" style={styles.input} />
-            <TextInput value={deviceType} onChangeText={setDeviceType} placeholder="Type" style={styles.input} />
-            <TouchableOpacity onPress={handleUpdate} style={styles.saveBtn}>
-              <Text style={{ color: "#fff" }}>Save</Text>
+      {loading ? <ActivityIndicator size="large" /> : (
+        <>
+          <View style={styles.tabHeader}>
+            <TouchableOpacity onPress={() => setActiveTab("assigned")} style={[styles.tab, activeTab === "assigned" && styles.activeTab]}>
+              <Text style={styles.tabText}>Assigned</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setActiveTab("unassigned")} style={[styles.tab, activeTab === "unassigned" && styles.activeTab]}>
+              <Text style={styles.tabText}>Unassigned</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
 
-      <Toast />
+          <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}>
+            {activeTab === "assigned" && assignedDevices.map((device, idx) => (
+              <DeviceCard key={idx} device={device} assigned />
+            ))}
+            {activeTab === "unassigned" && unassignedDevices.map((device, idx) => (
+              <DeviceCard key={idx} device={device} />
+            ))}
+          </ScrollView>
+
+          <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
+            <Ionicons name="add" size={30} color="white" />
+          </TouchableOpacity>
+
+          <Modal visible={modalVisible} transparent animationType="slide">
+            <View style={styles.modalContainer}>
+              <View style={styles.modalContent}>
+                <TextInput placeholder="Hub ID" style={styles.input} onChangeText={setHubIdInput} />
+                <TextInput placeholder="Name" style={styles.input} onChangeText={setHubName} />
+                <TextInput placeholder="SSID" style={styles.input} onChangeText={setHubSsid} />
+                <TextInput placeholder="Password" style={styles.input} secureTextEntry onChangeText={setHubPassword} />
+
+                <TouchableOpacity style={styles.modalButton} onPress={submitNewHub}>
+                  <Text style={{ color: "white" }}>Save</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
+                  <Text>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+        </>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 15, backgroundColor: "#fff" },
-  tabContainer: { flexDirection: "row", justifyContent: "space-around", marginBottom: 15 },
-  tab: { padding: 10, borderBottomWidth: 2, borderBottomColor: "transparent" },
-  tabActive: { borderBottomColor: "blue" },
-  tabText: { fontSize: 16 },
-  card: { backgroundColor: "#f0f0f0", padding: 15, borderRadius: 8, marginBottom: 10 },
-  cardTitle: { fontWeight: "bold", fontSize: 16, marginBottom: 5 },
-  cardActions: { flexDirection: "row", gap: 20, marginTop: 10 },
-  modalContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#000000aa" },
-  modalContent: { backgroundColor: "#fff", padding: 20, borderRadius: 10, width: "80%" },
-  input: { borderWidth: 1, padding: 10, marginVertical: 10, borderRadius: 5 },
-  saveBtn: { backgroundColor: "blue", padding: 10, alignItems: "center", borderRadius: 5 },
+  container: { flex: 1, padding: 10 },
+  tabHeader: { flexDirection: "row", marginBottom: 10 },
+  tab: { flex: 1, padding: 10, alignItems: "center", backgroundColor: "#ccc" },
+  activeTab: { backgroundColor: "#007bff" },
+  tabText: { color: "white", fontWeight: "bold" },
+  deviceCard: { flexDirection: "row", justifyContent: "space-between", padding: 15, marginVertical: 5, backgroundColor: "#eee", borderRadius: 8 },
+  deviceText: { fontSize: 16 },
+  assignButton: { backgroundColor: "#007bff", padding: 8, borderRadius: 5 },
+  fab: { position: "absolute", bottom: 20, right: 20, backgroundColor: "#007bff", borderRadius: 30, padding: 15 },
+  modalContainer: { flex: 1, justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" },
+  modalContent: { backgroundColor: "white", margin: 20, padding: 20, borderRadius: 10 },
+  input: { borderBottomWidth: 1, marginBottom: 10 },
+  modalButton: { backgroundColor: "#007bff", padding: 10, alignItems: "center", borderRadius: 5, marginTop: 10 },
+  cancelButton: { marginTop: 10, alignItems: "center" }
 });
