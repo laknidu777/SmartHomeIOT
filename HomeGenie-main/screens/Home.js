@@ -91,7 +91,13 @@ export default function SmartDashboard() {
 
       const instance = socket.connect();
       socketRef.current = instance;
-
+      
+      const homeId = await AsyncStorage.getItem("homeId");
+      if (homeId) {
+        instance.emit("registerDashboard", { homeId });
+        console.log("📤 Sent registerDashboard for:", homeId);
+      }
+      
       instance.on("deviceStatusChange", ({ espId, isOnline }) => {
         console.log("🔁 UI received deviceStatusChange:", espId, isOnline);
 
@@ -122,15 +128,24 @@ export default function SmartDashboard() {
     try {
       const token = await AsyncStorage.getItem("token");
       const newStatus = !device.status;
-
-      const res = await api.patch(
-        `/api/devices/toggle/${device.id}`,
-        { message: newStatus ? "Device ON" : "Device OFF", isOn: newStatus },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (!res?.data) throw new Error("Invalid response");
-
+  
+      if (device.assignedHubId) {
+        // Hub-controlled → send WebSocket command
+        const command = newStatus ? "on" : "off";
+        socketRef.current.emit("hubToggleCommand", `${device.espId},${command}`);
+        console.log("📤 Emitted hubToggleCommand:", device.espId, command);
+      } else {
+        // Backend-controlled → call API
+        const res = await api.patch(
+          `/api/devices/toggle/${device.id}`,
+          { message: newStatus ? "Device ON" : "Device OFF", isOn: newStatus },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+  
+        if (!res?.data) throw new Error("Invalid response");
+      }
+  
+      // Optimistically update UI
       setDevicesByRoom(prev => {
         const updated = { ...prev };
         const roomId = Object.keys(updated).find(id =>
@@ -138,7 +153,7 @@ export default function SmartDashboard() {
         );
         if (roomId) {
           updated[roomId] = updated[roomId].map(d =>
-            d.id === device.id ? { ...d, status: res.data.isOn } : d
+            d.id === device.id ? { ...d, status: newStatus } : d
           );
         }
         return updated;
@@ -148,7 +163,7 @@ export default function SmartDashboard() {
       Alert.alert("Error", "Failed to toggle device");
     }
   };
-
+  
   const scrollToRoom = (index) => {
     setSelectedRoomIndex(index);
     const yOffset = roomPositions[index] || index * 350;
