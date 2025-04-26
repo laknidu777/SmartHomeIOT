@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../utils/api';
-import socket from '../utils/socket';
+import { connectSocket, getSocket } from "../utils/socket";
 import StatusRow from '../components/StatusRow';
 import { RefreshControl } from 'react-native';
 
@@ -85,55 +85,117 @@ export default function SmartDashboard() {
 
   useEffect(() => {
     let isMounted = true;
-
+    let reconnectInterval;
+  
     const initialize = async () => {
-      await fetchCategoriesAndDevices();
-
-      const instance = socket.connect();
-      socketRef.current = instance;
-      
-      const homeId = await AsyncStorage.getItem("homeId");
-      if (homeId) {
-        instance.emit("registerDashboard", { homeId });
-        console.log("📤 Sent registerDashboard for:", homeId);
-      }
-      
-      instance.on("deviceStatusChange", ({ espId, isOnline }) => {
-        console.log("🔁 UI received deviceStatusChange:", espId, isOnline);
-
-        if (!isMounted) return;
-        setDevicesByRoom(prev => {
-          const updated = { ...prev };
-          for (const roomId in updated) {
-            updated[roomId] = updated[roomId].map(device =>
-              device.espId === espId ? { ...device, isOnline } : device
-            );
+      try {
+        await fetchCategoriesAndDevices();
+        
+        // Connect to socket and store the instance
+        const socketInstance = await connectSocket();
+        if (socketInstance) {
+          socketRef.current = socketInstance;
+          console.log("✅ Socket connection established");
+          
+          const homeId = await AsyncStorage.getItem("homeId");
+          if (homeId) {
+            socketInstance.emit("registerDashboard", { homeId });
+            console.log("📤 Sent registerDashboard for:", homeId);
+          } else {
+            console.warn("⚠️ No homeId found for registration");
           }
-          return updated;
-        });
-      });
+          
+          // Setup event listeners
+          socketInstance.on("deviceStatusChange", ({ espId, isOnline }) => {
+            console.log("🔁 UI received deviceStatusChange:", espId, isOnline);
+  
+            if (!isMounted) return;
+            setDevicesByRoom(prev => {
+              const updated = { ...prev };
+              for (const roomId in updated) {
+                updated[roomId] = updated[roomId].map(device =>
+                  device.espId === espId ? { ...device, isOnline } : device
+                );
+              }
+              return updated;
+            });
+          });
+        } else {
+          console.error("❌ Failed to initialize socket connection");
+        }
+      } catch (error) {
+        console.error("❌ Error in socket initialization:", error);
+      }
     };
-
+  
     initialize();
-
+    
+    // Set up periodic reconnection attempts
+    reconnectInterval = setInterval(async () => {
+      const socket = getSocket();
+      if (!socket || !socket.connected) {
+        console.log("🔄 Attempting socket reconnection...");
+        await connectSocket();
+      }
+    }, 30000); // Check every 30 seconds
+  
     return () => {
       isMounted = false;
+      if (reconnectInterval) clearInterval(reconnectInterval);
       if (socketRef.current) {
-        socketRef.current.off("deviceStatusChange");
+        try {
+          socketRef.current.off("deviceStatusChange");
+        } catch (err) {
+          console.error("❌ Error removing event listeners:", err);
+        }
       }
     };
   }, []);
-
   const toggleDevice = async (device) => {
     try {
       const token = await AsyncStorage.getItem("token");
       const newStatus = !device.status;
-  
+    
       if (device.assignedHubId) {
         // Hub-controlled → send WebSocket command
         const command = newStatus ? "on" : "off";
-        socketRef.current.emit("hubToggleCommand", `${device.espId},${command}`);
-        console.log("📤 Emitted hubToggleCommand:", device.espId, command);
+    
+        // Try to get the socket or reconnect
+        let socketInstance = getSocket();
+        
+        // If no socket exists or not connected, try to connect
+        if (!socketInstance || !socketInstance.connected) {
+          console.log("🔄 Socket not ready. Attempting to connect...");
+          await connectSocket();
+          socketInstance = getSocket();
+        }
+  
+        // Check if we now have a valid socket
+        if (socketInstance && socketInstance.connected) {
+          socketInstance.emit("hubToggleCommand", `${device.espId},${command}`);
+          console.log("📤 Emitted hubToggleCommand:", device.espId, command);
+          
+          // Optimistically update UI
+          setDevicesByRoom(prev => {
+            const updated = { ...prev };
+            const roomId = Object.keys(updated).find(id =>
+              updated[id].some(d => d.id === device.id)
+            );
+            if (roomId) {
+              updated[roomId] = updated[roomId].map(d =>
+                d.id === device.id ? { ...d, status: newStatus } : d
+              );
+            }
+            return updated;
+          });
+        } else {
+          console.warn("⚠️ Socket still not connected after retry.");
+          Alert.alert(
+            "Connection Error", 
+            "Cannot connect to hub. Please check your network connection and try again."
+          );
+          return;
+        }
       } else {
         // Backend-controlled → call API
         const res = await api.patch(
@@ -141,29 +203,43 @@ export default function SmartDashboard() {
           { message: newStatus ? "Device ON" : "Device OFF", isOn: newStatus },
           { headers: { Authorization: `Bearer ${token}` } }
         );
-  
         if (!res?.data) throw new Error("Invalid response");
-      }
-  
-      // Optimistically update UI
-      setDevicesByRoom(prev => {
-        const updated = { ...prev };
-        const roomId = Object.keys(updated).find(id =>
-          updated[id].some(d => d.id === device.id)
-        );
-        if (roomId) {
-          updated[roomId] = updated[roomId].map(d =>
-            d.id === device.id ? { ...d, status: newStatus } : d
+        
+        // Update UI after successful API call
+        setDevicesByRoom(prev => {
+          const updated = { ...prev };
+          const roomId = Object.keys(updated).find(id =>
+            updated[id].some(d => d.id === device.id)
           );
-        }
-        return updated;
-      });
+          if (roomId) {
+            updated[roomId] = updated[roomId].map(d =>
+              d.id === device.id ? { ...d, status: newStatus } : d
+            );
+          }
+          return updated;
+        });
+      }
     } catch (err) {
       console.error('❌ Failed to toggle device:', err);
       Alert.alert("Error", "Failed to toggle device");
     }
   };
   
+  // Helper function to update device state in UI
+  const updateDeviceState = (deviceId, newStatus) => {
+    setDevicesByRoom(prev => {
+      const updated = { ...prev };
+      const roomId = Object.keys(updated).find(id =>
+        updated[id].some(d => d.id === deviceId)
+      );
+      if (roomId) {
+        updated[roomId] = updated[roomId].map(d =>
+          d.id === deviceId ? { ...d, status: newStatus } : d
+        );
+      }
+      return updated;
+    });
+  };
   const scrollToRoom = (index) => {
     setSelectedRoomIndex(index);
     const yOffset = roomPositions[index] || index * 350;
