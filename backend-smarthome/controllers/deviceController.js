@@ -1,5 +1,5 @@
   import db from '../models/index.js';
-  import { sendCommandToDevice } from '../sockets/deviceSocket.js';
+  import { sendCommandToDevice, hubSockets,deviceSockets  } from '../sockets/deviceSocket.js';
 
   const Device = db.Device;
   const Room = db.Room;
@@ -48,21 +48,30 @@
           include: { model: db.Home, where: { userId: req.user.userId } },
         },
       });
-
+  
       if (!device) return res.status(404).json({ error: 'Device not found or access denied' });
-
+  
       const newStatus = !device.isOn;
       device.isOn = newStatus;
       await device.save();
-
-      await DeviceLog.create({
+  
+      await db.DeviceLog.create({
         deviceId: device.id,
         action: newStatus ? 'on' : 'off',
         triggeredBy: 'app',
       });
+      console.log("➡️ Device:", device.espId);
+      console.log("🧠 assignedHubId from DB:", device.assignedHubId);
+      console.log("📡 Connected hubs:", [...hubSockets.keys()]);
 
-      sendCommandToDevice(device.espId, newStatus ? 'on' : 'off');
-
+      if (device.assignedHubId && hubSockets.has(device.assignedHubId)) {
+        const hubSocket = hubSockets.get(device.assignedHubId);
+        hubSocket.emit("hubToggleCommand", [device.espId, newStatus ? "1" : "0"]);
+        console.log(`📤 Routed toggle to hub ${device.assignedHubId} for ${device.espId}`);
+      } else {
+        sendCommandToDevice(device.espId, newStatus ? 'on' : 'off');
+      }
+  
       res.status(200).json({
         message: `Device ${newStatus ? 'ON' : 'OFF'}`,
         isOn: newStatus,
@@ -188,28 +197,36 @@
   export const assignDeviceToHub = async (req, res) => {
     const { espId } = req.params;
     const { hubId, hubSsid, hubPassword } = req.body;
-
+  
     try {
       const device = await Device.findOne({ where: { espId } });
       if (!device) return res.status(404).json({ message: 'Device not found' });
-
-      // Save hub assignment
+  
+      // Update database
       device.assignedHubId = hubId;
       device.hubSsid = hubSsid;
       device.hubPassword = hubPassword;
       await device.save();
-
-      // Tell the device to switch networks via WebSocket
-      
+  
       const command = `ASSIGN:${hubSsid},${hubPassword}`;
-      sendCommandToDevice(espId, command);
-
+      const socket = deviceSockets.get(espId);
+  
+      if (socket) {
+        console.log(`📤 Sending ASSIGN directly to device ${espId}`);
+        socket.emit("deviceCommand", command);
+      } else if (hubSockets.has(hubId)) {
+        console.log(`📤 Device not connected — routing ASSIGN to hub ${hubId}`);
+        hubSockets.get(hubId).emit("hubAssignCommand", [espId, hubSsid, hubPassword]);
+      } else {
+        console.warn(`⚠️ Cannot assign device — device and hub both offline.`);
+      }
+  
       res.json({ message: `Device ${espId} assigned to hub ${hubId}` });
     } catch (err) {
-      console.error('❌ assignDeviceToHub error:', err.message);
+      console.error("❌ assignDeviceToHub error:", err.message);
       res.status(500).json({ message: 'Internal error' });
     }
-  };
+  };  
   export const markDeviceOffline = async (req, res) => {
     const { espId } = req.params;
 
@@ -227,5 +244,41 @@
     } catch (err) {
       console.error("❌ markDeviceOffline error:", err.message);
       res.status(500).json({ message: 'Internal error' });
+    }
+  };
+  export const unassignDeviceFromHub = async (req, res) => {
+    const { espId } = req.params;
+  
+    try {
+      const device = await Device.findOne({ where: { espId } });
+      if (!device) return res.status(404).json({ message: 'Device not found' });
+  
+      const hubId = device.assignedHubId;
+      console.log(`🔄 Unassigning ${espId} from hub ${hubId}`);
+  
+      // Step 1: Clear assignment in DB
+      device.assignedHubId = null;
+      device.hubSsid = null;
+      device.hubPassword = null;
+      await device.save();
+  
+      // Step 2: Route RESET command with improved debugging
+      if (deviceSockets.has(espId)) {
+        const socket = deviceSockets.get(espId);
+        console.log(`📤 Sending reset directly to device ${espId}`);
+        socket.emit("deviceCommand", "reset");
+      } else if (hubSockets.has(hubId)) {
+        const hubSocket = hubSockets.get(hubId);
+        console.log(`📤 Sending reset to hub ${hubId} for device ${espId}`);
+        hubSocket.emit("hubResetCommand", [espId]);
+      } else {
+        console.warn(`⚠️ Could not reach ${espId} — not connected to hub or backend`);
+      }
+  
+      req.io.emit('deviceStatusChange', { espId, isOnline: false });
+      return res.status(200).json({ message: `Device ${espId} unassigned from hub` });
+    } catch (err) {
+      console.error("❌ unassignDeviceFromHub error:", err.message);
+      res.status(500).json({ message: "Internal error" });
     }
   };

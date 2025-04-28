@@ -9,7 +9,7 @@ import { registerHub,
  import { authenticate } from '../middleware/authMiddleware.js';
 
  const router = express.Router();
- 
+ router.post('/register', authenticate, registerHub);
  router.get('/by-home/:homeId', authenticate, getHubsByHome);
  router.get('/:hubId/devices', authenticate, getDevicesByHub);
  router.get('/unassigned/:homeId', authenticate, getUnassignedDevices);

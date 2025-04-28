@@ -8,7 +8,8 @@ String espId = "";  // <-- Will be generated from chip ID
 
 const uint8_t RELAY_PIN = 2;     // Signal pin (D2)
 const uint8_t LED_PIN = 4;
-const uint8_t RESET_PIN = 0;
+const uint8_t RESET_PIN = 12;
+const unsigned long RESET_PRESS_DURATION = 3000; // Reduced to 3 seconds for reset
 
 Preferences preferences;
 String hubSsid = "";
@@ -29,6 +30,7 @@ void saveHubCreds(String ssid, String password) {
   preferences.putString("ssid", ssid);
   preferences.putString("password", password);
   preferences.end();
+  Serial.println("💾 Saved hub credentials");
 }
 
 void loadHubCreds() {
@@ -36,45 +38,131 @@ void loadHubCreds() {
   hubSsid = preferences.getString("ssid", "");
   hubPassword = preferences.getString("password", "");
   preferences.end();
+  Serial.printf("📋 Loaded hub credentials - SSID: %s\n", hubSsid.c_str());
 }
 
+void clearAllCredentials() {
+  Serial.println("🧹 CLEARING ALL CREDENTIALS!");
+  
+  // Make sure all LED is solid on for visual feedback
+  digitalWrite(LED_PIN, HIGH);
+  
+  // Clear WiFiManager stored credentials
+  WiFi.disconnect(true,true); // true = erase stored credentials
+  delay(100);
+  esp_wifi_restore();
+  delay(100);
+  
+  // Clear our hub preferences
+  preferences.begin("hub", false);
+  preferences.clear();
+  preferences.end();
+  
+  // Clear WiFi Manager preferences
+  preferences.begin("wifi", false);
+  preferences.clear();
+  preferences.end();
+  
+  // Flash LED to indicate success
+  for (int i = 0; i < 10; i++) {
+    digitalWrite(LED_PIN, i % 2);
+    delay(200);
+  }
+  
+  Serial.println("🔄 All credentials cleared. Rebooting...");
+  delay(1000);
+  ESP.restart();
+}
 void checkResetButton() {
   if (digitalRead(RESET_PIN) == LOW) {
     if (!buttonPressed) {
       buttonPressed = true;
       buttonPressStartTime = millis();
+      Serial.println("🔘 Reset button press started");
     } else if (millis() - buttonPressStartTime >= 6000) {
-      preferences.begin("hub", false);
+      Serial.println("🧹 Performing full Wi-Fi and prefs wipe");
+
+      digitalWrite(LED_PIN, HIGH);  // solid light during wipe
+
+      WiFi.disconnect(true, true);
+      delay(100);
+      esp_wifi_restore();
+      delay(100);
+
+      preferences.begin("wifi", false);
       preferences.clear();
       preferences.end();
-      Serial.println("🔄 Hub credentials cleared. Rebooting...");
+
+      preferences.begin("hub", false); // Optional: in case you store anything else
+      preferences.clear();
+      preferences.end();
+
+      for (int i = 0; i < 10; i++) {
+        digitalWrite(LED_PIN, i % 2);
+        delay(200);
+      }
+
+      Serial.println("🔁 Rebooting after wipe");
       delay(1000);
       ESP.restart();
     }
   } else {
+    if (buttonPressed) {
+      Serial.printf("🔘 Button released after %lu ms\n", millis() - buttonPressStartTime);
+    }
     buttonPressed = false;
   }
 }
-
 // ===== HUB MODE =====
 void onHubWsEvent(WStype_t type, uint8_t * payload, size_t length) {
   if (type == WStype_CONNECTED) {
     Serial.println("🔌 Connected to Hub WS");
     hubSocket.sendTXT("HEARTBEAT:" + espId);
   }
-
   else if (type == WStype_TEXT) {
-    String msg = String((char*)payload);
-    Serial.printf("📥 Command from Hub: %s\n", msg.c_str());
+  String msg = String((char*)payload);
+  Serial.printf("📥 Command from Hub: %s\n", msg.c_str());
+  
+  if (msg.startsWith("COMMAND:")) {
+    Serial.printf("🧪 Raw COMMAND received: %s\n", msg.c_str());
 
-    if (msg == "COMMAND:on") {
-      digitalWrite(RELAY_PIN, HIGH);
-      Serial.println("⚡ Relay turned ON (via Hub)");
-    } else if (msg == "COMMAND:off") {
-      digitalWrite(RELAY_PIN, LOW);
-      Serial.println("⚡ Relay turned OFF (via Hub)");
+    int firstColon = msg.indexOf(':');
+    int secondColon = msg.indexOf(':', firstColon + 1);
+    if (firstColon != -1 && secondColon != -1) {
+      String targetId = msg.substring(firstColon + 1, secondColon);
+      String command = msg.substring(secondColon + 1);
+      targetId.trim();
+      command.trim();
+
+      Serial.printf("🔍 Parsed target: '%s' | local espId: '%s'\n", targetId.c_str(), espId.c_str());
+      Serial.printf("⚙️ Parsed command: '%s' (length: %d)\n", command.c_str(), command.length());
+
+      if (targetId == espId) {
+        if (command == "1") {
+        digitalWrite(RELAY_PIN, HIGH);
+        Serial.println("⚡ Relay turned ON");
+      } else if (command == "0") {
+        digitalWrite(RELAY_PIN, LOW);
+        Serial.println("⚡ Relay turned OFF");
+      }
+ 
+        else if (command == "reset") {
+          Serial.println("🔄 RESET command received and MATCHED - clearing credentials now!");
+          // Add a small delay to ensure the response is fully sent
+          delay(500);
+          clearAllCredentials();  // This should reboot the ESP
+        }
+        else {
+          Serial.printf("❓ Unknown command received: '%s'\n", command.c_str());
+        }
+      } else {
+        Serial.println("🚫 Command target ID does not match this ESP32");
+      }
+    } else {
+      Serial.println("❌ Malformed COMMAND string - couldn't find both colons");
     }
   }
+}
 }
 
 void connectToHubAP() {
@@ -114,10 +202,10 @@ void handleBackendEvents() {
     String msg = String(payload).substring(0, length);
     Serial.printf("📥 Received deviceCommand: %s\n", msg.c_str());
 
-    if (msg == "on") {
+    if (msg == "1") {
       digitalWrite(RELAY_PIN, HIGH);
       Serial.println("⚡ Relay turned ON (via Backend)");
-    } else if (msg == "off") {
+    } else if (msg == "0") {
       digitalWrite(RELAY_PIN, LOW);
       Serial.println("⚡ Relay turned OFF (via Backend)");
     } else if (msg.startsWith("ASSIGN:")) {
@@ -129,16 +217,31 @@ void handleBackendEvents() {
       saveHubCreds(ssid, pw);
       delay(1000);
       ESP.restart();
+    } else if (msg == "reset") {
+      // Allow remote reset via backend
+      clearAllCredentials();
     }
   });
+  backendSocket.on("disconnect", [](const char* payload, size_t length) {
+  Serial.println("❌ Disconnected from Backend WS");
+}); 
+
 }
 
 void setup() {
   Serial.begin(115200);
+  delay(1000); // Give serial time to connect
+  
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
-  pinMode(RESET_PIN, INPUT_PULLUP);
+  pinMode(RESET_PIN, INPUT_PULLUP); // This should make button HIGH when not pressed
+  
   digitalWrite(RELAY_PIN, LOW);
+  digitalWrite(LED_PIN, HIGH);  // Turn on LED initially
+  
+  Serial.println("\n\n===============================");
+  Serial.println("🚀 ESP32 STARTING UP");
+  Serial.println("===============================");
 
   // ✅ Generate unique ESP ID from chip
   uint64_t chipId = ESP.getEfuseMac();
@@ -148,24 +251,80 @@ void setup() {
   espId = String(idStr);
   Serial.println("🆔 Generated ESP ID: " + espId);
 
+  // Check for reset button three times over 3 seconds (debounce)
+  int pressedCount = 0;
+  Serial.println("🔘 Checking reset button state at startup...");
+  
+  for (int i = 0; i < 3; i++) {
+    int buttonState = digitalRead(RESET_PIN);
+    Serial.printf("🔘 Reset button reading %d: %s\n", i, buttonState == LOW ? "PRESSED" : "RELEASED");
+    
+    if (buttonState == LOW) {
+      pressedCount++;
+    }
+    
+    digitalWrite(LED_PIN, i % 2); // Blink LED during check
+    delay(150);
+  }
+  
+  // If the button appears to be consistently pressed at startup
+  if (pressedCount >= 2) {
+    Serial.println("⚠️ Reset button appears to be pressed at startup!");
+    Serial.println("🔄 Will perform factory reset now");
+    clearAllCredentials(); // This will reboot the ESP
+  }
+  
+  // Special case - if your button is wired backward or inverted
+  // Uncomment this section if needed
+  /*
+  Serial.println("⚙️ NOTE: Reset button is configured with INVERTED logic");
+  // Swap HIGH and LOW for the button
+  #define BUTTON_PRESSED HIGH
+  #define BUTTON_RELEASED LOW
+  */
+
+  // Normal startup continues
   loadHubCreds();
 
   if (hubSsid != "") {
     connectToHubAP();
   } else {
+    Serial.println("📋 No hub credentials found, connecting to backend Wi-Fi");
     WiFiManager wm;
-    wm.autoConnect("Device_Setup");
-    Serial.println("✅ Connected to backend Wi-Fi");
+    
+    // Make sure WiFiManager will create its own AP if connection fails
+    wm.setConfigPortalTimeout(120); // 2 minutes timeout for config portal
+    
+    // Add a custom reset parameter to menu
+    WiFiManagerParameter custom_reset_button("reset_button", "Reset All Settings", "Reset", 6);
+    wm.addParameter(&custom_reset_button);
 
-    backendSocket.begin("192.168.8.141", 5000);
-    handleBackendEvents();
+    bool connected = wm.autoConnect("Device_Setup");
+    
+    if (connected) {
+      Serial.println("✅ Connected to backend Wi-Fi");
+      Serial.println("📡 Attempting socket connection to backend..."); 
+      backendSocket.begin("192.168.8.141", 5000);
+      handleBackendEvents();
+    } else {
+      Serial.println("❌ Failed to connect to WiFi, will reboot and try again");
+      delay(3000);
+      ESP.restart();
+    }
   }
+  
+  // Final setup debug info
+  Serial.println("🔄 Setup complete, entering main loop");
+  Serial.printf("📊 Status: Hub Mode = %s, Connected to %s\n", 
+                isInHubMode ? "YES" : "NO", 
+                WiFi.SSID().c_str());
 }
 
 void loop() {
   checkResetButton();
 
-  if (millis() - lastBlink > 1000) {
+  // Normal LED blinking (only if not in reset button press)
+  if (!buttonPressed && millis() - lastBlink > 1000) {
     ledState = !ledState;
     digitalWrite(LED_PIN, ledState);
     lastBlink = millis();
@@ -181,7 +340,6 @@ void loop() {
       hubSocket.sendTXT(msg);
       Serial.println("❤️ Sent heartbeat to Hub: " + msg);
     }
-
   } else {
     backendSocket.loop();
 

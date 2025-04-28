@@ -154,76 +154,33 @@ export default function SmartDashboard() {
   const toggleDevice = async (device) => {
     try {
       const token = await AsyncStorage.getItem("token");
-      const newStatus = !device.status;
-    
-      if (device.assignedHubId) {
-        // Hub-controlled → send WebSocket command
-        const command = newStatus ? "on" : "off";
-    
-        // Try to get the socket or reconnect
-        let socketInstance = getSocket();
-        
-        // If no socket exists or not connected, try to connect
-        if (!socketInstance || !socketInstance.connected) {
-          console.log("🔄 Socket not ready. Attempting to connect...");
-          await connectSocket();
-          socketInstance = getSocket();
-        }
+      const res = await api.patch(
+        `/api/devices/toggle/${device.id}`,
+        {}, // backend already handles the toggle
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
   
-        // Check if we now have a valid socket
-        if (socketInstance && socketInstance.connected) {
-          socketInstance.emit("hubToggleCommand", `${device.espId},${command}`);
-          console.log("📤 Emitted hubToggleCommand:", device.espId, command);
-          
-          // Optimistically update UI
-          setDevicesByRoom(prev => {
-            const updated = { ...prev };
-            const roomId = Object.keys(updated).find(id =>
-              updated[id].some(d => d.id === device.id)
-            );
-            if (roomId) {
-              updated[roomId] = updated[roomId].map(d =>
-                d.id === device.id ? { ...d, status: newStatus } : d
-              );
-            }
-            return updated;
-          });
-        } else {
-          console.warn("⚠️ Socket still not connected after retry.");
-          Alert.alert(
-            "Connection Error", 
-            "Cannot connect to hub. Please check your network connection and try again."
-          );
-          return;
-        }
-      } else {
-        // Backend-controlled → call API
-        const res = await api.patch(
-          `/api/devices/toggle/${device.id}`,
-          { message: newStatus ? "Device ON" : "Device OFF", isOn: newStatus },
-          { headers: { Authorization: `Bearer ${token}` } }
+      if (!res?.data) throw new Error("Invalid response");
+  
+      // Update local UI
+      setDevicesByRoom(prev => {
+        const updated = { ...prev };
+        const roomId = Object.keys(updated).find(id =>
+          updated[id].some(d => d.id === device.id)
         );
-        if (!res?.data) throw new Error("Invalid response");
-        
-        // Update UI after successful API call
-        setDevicesByRoom(prev => {
-          const updated = { ...prev };
-          const roomId = Object.keys(updated).find(id =>
-            updated[id].some(d => d.id === device.id)
+        if (roomId) {
+          updated[roomId] = updated[roomId].map(d =>
+            d.id === device.id ? { ...d, isOn: res.data.isOn } : d
           );
-          if (roomId) {
-            updated[roomId] = updated[roomId].map(d =>
-              d.id === device.id ? { ...d, status: newStatus } : d
-            );
-          }
-          return updated;
-        });
-      }
+        }
+        return updated;
+      });
     } catch (err) {
-      console.error('❌ Failed to toggle device:', err);
-      Alert.alert("Error", "Failed to toggle device");
+      console.error("❌ Failed to toggle device:", err);
+      Alert.alert("Error", "Could not toggle device. Please try again.");
     }
   };
+  
   
   // Helper function to update device state in UI
   const updateDeviceState = (deviceId, newStatus) => {
@@ -328,7 +285,7 @@ export default function SmartDashboard() {
                         </Text>
                       </View>
                       <View style={styles.deviceControls}>
-                        <Switch value={device.status} onValueChange={() => toggleDevice(device)} />
+                      <Switch value={device.isOn} onValueChange={() => toggleDevice(device)} />
                         <TouchableOpacity onPress={() => setMenuDevice(device)}>
                           <Text style={styles.menuDots}>⋮</Text>
                         </TouchableOpacity>

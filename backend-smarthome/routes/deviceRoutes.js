@@ -1,7 +1,7 @@
 import express from 'express';
 import { createDevice, getDevicesByRoom,toggleDevice,getAllDevicesForUser,
     updateDevice,
-    deleteDevice, assignDeviceToHub,markDeviceOffline} from '../controllers/deviceController.js';
+    deleteDevice, assignDeviceToHub,markDeviceOffline,unassignDeviceFromHub} from '../controllers/deviceController.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -13,5 +13,6 @@ router.put('/update/:id', updateDevice);
 router.delete('/delete/:id', deleteDevice);
 router.get('/:roomId', getDevicesByRoom);
 router.patch('/toggle/:id', toggleDevice);
-router.post('/:espId/assign-hub', assignDeviceToHub);
+router.patch('/:espId/assign-hub', assignDeviceToHub);
+router.patch('/:espId/unassign-hub', unassignDeviceFromHub);
 export default router;

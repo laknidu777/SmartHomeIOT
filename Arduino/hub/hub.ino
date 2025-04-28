@@ -1,10 +1,13 @@
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <WebServer.h>
 #include <Preferences.h>
 #include <WebSocketsServer.h>
 #include <SocketIOclient.h>
 #include <vector>
 #include <HTTPClient.h>
+#include <ArduinoJson.h>
+
 
 Preferences preferences;
 WebServer server(80);
@@ -174,30 +177,91 @@ void backendSocketEvent(socketIOmessageType_t type, uint8_t * payload, size_t le
     }
 
     case sIOtype_EVENT: {
+      Serial.printf("📥 Raw event: %s\n", (char*)payload);
       String msg = String((char*)payload);
       Serial.print("📥 Event from backend: ");
       Serial.println(msg);
-
       if (msg.indexOf("hubToggleCommand") != -1) {
+        Serial.println("✅ Matched hubToggleCommand");
+
+        DynamicJsonDocument doc(256);
+        DeserializationError error = deserializeJson(doc, msg);
+
+        if (error) {
+          Serial.print(F("❌ deserializeJson() failed: "));
+          Serial.println(error.f_str());
+          return;
+        }
+
+        if (doc[0] == "hubToggleCommand") {
+          String espId = doc[1][0].as<String>();
+          String command = doc[1][1].as<String>();
+
+          String wsCommand = "COMMAND:" + espId + ":" + command;
+          Serial.printf("📤 Sending command via WS: %s\n", wsCommand.c_str());
+          webSocket.broadcastTXT(wsCommand);
+        }
+      }
+
+
+
+      else if (msg.indexOf("hubAssignCommand") != -1) {
+        Serial.println("✅ Matched hubAssignCommand");
+
         int dataStart = msg.indexOf(",") + 1;
         String jsonData = msg.substring(dataStart, msg.length() - 1);
 
         int sep = jsonData.indexOf(",");
         String espId = jsonData.substring(0, sep);
-        String command = jsonData.substring(sep + 1);
-        String wsCommand = "COMMAND:" + command;
+        String credentials = jsonData.substring(sep + 1); // Should be ssid,password
+
+        String wsCommand = "ASSIGN:" + credentials;
 
         for (auto& dev : connectedDevices) {
           if (dev.id == espId) {
             webSocket.broadcastTXT(wsCommand);
-            Serial.printf("📤 Relayed to %s: %s\n", espId.c_str(), wsCommand.c_str());
+            Serial.printf("📤 Relayed ASSIGN to %s: %s\n", espId.c_str(), wsCommand.c_str());
             break;
           }
         }
       }
-      break;
+      else if (msg.indexOf("hubResetCommand") != -1) {
+  Serial.println("✅ Matched hubResetCommand");
+
+  // Step 1: Find the outer [ of the inner array
+  int arrayStart = msg.indexOf(",[");
+  int quoteStart = msg.indexOf("\"", arrayStart);
+  int quoteEnd = msg.indexOf("\"", quoteStart + 1);
+
+  if (quoteStart != -1 && quoteEnd != -1 && quoteEnd > quoteStart) {
+    String deviceId = msg.substring(quoteStart + 1, quoteEnd);
+    deviceId.trim();
+
+    Serial.printf("🎯 Target device for reset: '%s'\n", deviceId.c_str());
+
+    String wsCommand = "COMMAND:" + deviceId + ":reset";
+    Serial.printf("📤 Preparing reset command: '%s'\n", wsCommand.c_str());
+
+    bool deviceFound = false;
+    for (auto& dev : connectedDevices) {
+      if (dev.id == deviceId) {
+        deviceFound = true;
+        webSocket.broadcastTXT(wsCommand);
+        Serial.printf("📤 Successfully sent RESET to device '%s'\n", deviceId.c_str());
+        break;
+      }
     }
 
+    if (!deviceFound) {
+      Serial.printf("⚠️ Cannot send reset - device '%s' not in connected list\n", deviceId.c_str());
+    }
+  } else {
+    Serial.println("❌ Failed to extract espId from hubResetCommand");
+  }
+}
+
+      break;
+    }
     case sIOtype_DISCONNECT: {
       Serial.println("❌ Disconnected from backend");
       hubRegistered = false; // allow re-registration next time
@@ -216,10 +280,14 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   pinMode(RESET_PIN, INPUT_PULLUP);
   setupWiFi();
-
   webSocket.begin();
   webSocket.onEvent(handleWebSocket);
   Serial.println("🔌 WebSocket Server started (port 81)");
+  Serial.println("🧩 Connected devices:");
+    for (auto& dev : connectedDevices) {
+      Serial.println(" - " + dev.id);
+    }
+
 
   setupBackendSocket();
 }

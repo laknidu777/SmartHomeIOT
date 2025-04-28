@@ -2,17 +2,21 @@ import db from '../models/index.js';
 const { Hub, Home, Device, Room } = db;
 
 export const registerHub = async (req, res) => {
-  const { hubId, name, ssid, password } = req.body;
+  const { hubId, name, ssid, password, homeId } = req.body;
 
   try {
+    if (!hubId || !name || !ssid || !password || !homeId) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
     const [hub, created] = await Hub.findOrCreate({
       where: { hubId },
-      defaults: { name, ssid, password }
+      defaults: { name, ssid, password, homeId } // ✅ ADD homeId here
     });
 
     res.status(201).json({ hub, created });
   } catch (err) {
-    console.error(err);
+    console.error("❌ registerHub error:", err);
     res.status(500).json({ message: 'Failed to register hub' });
   }
 };
@@ -29,8 +33,19 @@ export const getHubsByHome = async (req, res) => {
       return res.status(403).json({ error: 'Access denied to this home' });
     }
 
-    const hubs = await Hub.findAll({ where: { homeId } });
-    res.json(hubs);
+    const hubs = await Hub.findAll({
+      where: { homeId },
+      attributes: ['hubId', 'name', 'ssid', 'password', 'lastSeen', 'isOnline']
+    });    
+    const formattedHubs = hubs.map(hub => ({
+      hubId: hub.hubId,
+      name: hub.name,
+      hubSsid: hub.ssid,
+      hubPassword: hub.password,
+      isOnline: hub.isOnline,
+      lastSeen: hub.lastSeen,
+    }));
+    res.json(formattedHubs);
   } catch (err) {
     console.error("❌ getHubsByHome error:", err);
     res.status(500).json({ error: "Server error fetching hubs" });
