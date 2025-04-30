@@ -2,6 +2,7 @@ import express from 'express';
 import http from 'http';
 import socketIo from 'socket.io'; // ✅ works for CommonJS in ES Modules
 import dotenv from 'dotenv';
+import cors from 'cors';
 
 import userRoutes from './routes/userRoutes.js';
 import homeRoutes from './routes/homeRoutes.js';
@@ -9,6 +10,7 @@ import roomRoutes from './routes/roomRoutes.js';
 import deviceRoutes from './routes/deviceRoutes.js';
 import hubRoutes from './routes/hubRoutes.js';
 import { registerDeviceSocketHandlers } from './sockets/deviceSocket.js';
+// ✅ Apply CORS to REST APIs
 dotenv.config();
 const app = express();
 const server = http.createServer(app);
@@ -18,6 +20,11 @@ const io = socketIo(server, {
     methods: ['GET', 'POST'],
   },
 });
+app.use(cors({
+  origin: 'http://localhost:3000', // frontend URL
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  credentials: true,
+}));
 app.use(express.json());
 app.use((req, res, next) => {
   req.io = io;
