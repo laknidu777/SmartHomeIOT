@@ -1,5 +1,10 @@
 export default (sequelize, DataTypes) => {
   const Device = sequelize.define("Device", {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+    },    
     name: DataTypes.STRING,
     type: DataTypes.STRING,
     espId: {
@@ -14,7 +19,7 @@ export default (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },
-    roomId: DataTypes.INTEGER,
+    roomId: DataTypes.UUID,
     assignedHubId: {
       type: DataTypes.STRING, // Must match Hub.hubId (string PK)
       allowNull: true,

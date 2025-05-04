@@ -11,13 +11,14 @@
     try {
       const room = await Room.findOne({
         where: { id: roomId },
-        include: { model: db.Home, where: { userId: req.user.userId } },
+        include: { model: db.Home, where: { ownerId: req.user.id } },
       });
       if (!room) return res.status(403).json({ error: 'Room not found or access denied' });
 
       const device = await Device.create({ roomId, name, type, espId });
       res.status(201).json(device);
     } catch (err) {
+      console.error('❌ createDevice error:', err);
       res.status(500).json({ error: 'Failed to create device' });
     }
   };
@@ -27,7 +28,7 @@
     try {
       const room = await Room.findOne({
         where: { id: roomId },
-        include: { model: db.Home, where: { userId: req.user.userId } },
+        include: { model: db.Home, where: { ownerId: req.user.id } },
       });
       if (!room) return res.status(403).json({ error: 'Room not found or access denied' });
 
@@ -45,7 +46,7 @@
         where: { id },
         include: {
           model: db.Room,
-          include: { model: db.Home, where: { userId: req.user.userId } },
+          include: { model: db.Home, where: { ownerId: req.user.id  } },
         },
       });
   
@@ -69,7 +70,7 @@
         hubSocket.emit("hubToggleCommand", [device.espId, newStatus ? "1" : "0"]);
         console.log(`📤 Routed toggle to hub ${device.assignedHubId} for ${device.espId}`);
       } else {
-        sendCommandToDevice(device.espId, newStatus ? 'on' : 'off');
+        sendCommandToDevice(device.espId, newStatus ? '1' : '0'); // ✅ Match Arduino
       }
   
       res.status(200).json({
@@ -90,7 +91,7 @@
         where: { id },
         include: {
           model: db.Room,
-          include: { model: db.Home, where: { userId: req.user.userId } },
+          include: { model: db.Home, where: { ownerId: req.user.userId } },
         },
       });
 

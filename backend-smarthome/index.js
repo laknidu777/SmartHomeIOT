@@ -9,6 +9,7 @@ import homeRoutes from './routes/homeRoutes.js';
 import roomRoutes from './routes/roomRoutes.js';
 import deviceRoutes from './routes/deviceRoutes.js';
 import hubRoutes from './routes/hubRoutes.js';
+import userAssignmentRoutes from './routes/UserAssign.js';
 import { registerDeviceSocketHandlers } from './sockets/deviceSocket.js';
 // ✅ Apply CORS to REST APIs
 dotenv.config();
@@ -37,6 +38,8 @@ app.use('/api/homes', homeRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/hubs', hubRoutes);  
+app.use('/api/user-assign', userAssignmentRoutes);
+
 // Socket.IO
 registerDeviceSocketHandlers(io);
 app.get('/', (req, res) => {

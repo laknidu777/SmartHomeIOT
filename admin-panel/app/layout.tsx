@@ -1,8 +1,9 @@
 // /app/layout.tsx
 import { Inter } from 'next/font/google';
 import './globals.css';
-import ProtectedLayout from '@/components/layout'; // ✅ correct
+import ProtectedLayout from '@/components/layout';
 import { ReactNode } from 'react';
+import { HomeProvider } from './context/HomeContext'; // ✅ fixed import
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -15,7 +16,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body className={inter.className}>
-        <ProtectedLayout>{children}</ProtectedLayout>
+        <HomeProvider> {/* ✅ Wrap everything in HomeProvider */}
+          <ProtectedLayout>
+            {children}
+          </ProtectedLayout>
+        </HomeProvider>
       </body>
     </html>
   );

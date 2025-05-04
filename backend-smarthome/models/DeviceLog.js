@@ -1,6 +1,9 @@
 export default (sequelize, DataTypes) => {
     const DeviceLog = sequelize.define('DeviceLog', {
-      deviceId: DataTypes.INTEGER,
+      deviceId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+      },
       action: DataTypes.STRING,
       triggeredBy: DataTypes.STRING, // "app", "emg", "automation", etc.
     });

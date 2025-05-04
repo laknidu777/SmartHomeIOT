@@ -1,98 +1,103 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Table, Modal, Button, Form, Input, Select, Tag, Checkbox, message, Space,
+  Table, Modal, Button, Form, Input, Select, Tag, message, Space,
 } from 'antd';
+import axios from '@/lib/api';
+import { useHome } from '@/app/context/HomeContext'; // ✅ context import
 
 const { Option } = Select;
 
-// Dummy data
-const dummyRooms = [
-  { id: 'room1', name: 'Living Room' },
-  { id: 'room2', name: 'Bedroom' },
-];
-
-const dummyDevices = {
-  room1: [
-    { id: 'device1', name: 'Light' },
-    { id: 'device2', name: 'Fan' },
-  ],
-  room2: [
-    { id: 'device3', name: 'AC' },
-  ],
-};
-
 export default function UsersPage() {
+  const { homeId, homeName } = useHome();
   const [users, setUsers] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [devicesByRoom, setDevicesByRoom] = useState({});
   const [form] = Form.useForm();
-  const [visible, setVisible] = useState(false);
-  const [assignRoomsModal, setAssignRoomsModal] = useState(null);
-  const [assignDevicesModal, setAssignDevicesModal] = useState(null);
+  const [addUserVisible, setAddUserVisible] = useState(false);
+  const [email, setEmail] = useState('');
 
-  const handleAddUser = (values) => {
-    const newUser = {
-      id: Date.now().toString(),
-      ...values,
-      rooms: [],
-      deviceAccess: {},
-    };
-    setUsers((prev) => [...prev, newUser]);
-    form.resetFields();
-    setVisible(false);
-    message.success('User added (dummy)');
+  useEffect(() => {
+    if (!homeId) return;
+    fetchUsers();
+    fetchRoomsAndDevices();
+  }, [homeId]);
+
+  const fetchUsers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.get(`/user-assign/homes/${homeId}/assign-user`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUsers(res.data.users || []);
+    } catch (err) {
+      message.error('Failed to load users');
+    }
   };
 
-  const handleAssignRooms = (userId, selectedRooms) => {
-    setUsers((prev) =>
-      prev.map((user) =>
-        user.id === userId ? { ...user, rooms: selectedRooms } : user
-      )
-    );
-    setAssignRoomsModal(null);
+  const fetchRoomsAndDevices = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const roomRes = await axios.get(`/rooms/${homeId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const roomsData = roomRes.data || [];
+      setRooms(roomsData);
+
+      const deviceMap = {};
+      for (const room of roomsData) {
+        const devRes = await axios.get(`/devices/${room.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        deviceMap[room.id] = devRes.data || [];
+      }
+
+      setDevicesByRoom(deviceMap);
+    } catch (err) {
+      message.error('Failed to load rooms or devices');
+    }
   };
 
-  const handleAssignDevices = (userId, roomId, selectedDeviceIds) => {
-    setUsers((prev) =>
-      prev.map((user) =>
-        user.id === userId
-          ? {
-              ...user,
-              deviceAccess: {
-                ...user.deviceAccess,
-                [roomId]: selectedDeviceIds,
-              },
-            }
-          : user
-      )
-    );
-    setAssignDevicesModal(null);
+  const handleAssignUser = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(`/user-assign/homes/${homeId}/assign-user`, { email }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      message.success('User assigned');
+      setEmail('');
+      setAddUserVisible(false);
+      fetchUsers();
+    } catch (err) {
+      message.error('Failed to assign user');
+    }
+  };
+
+  const handleRemoveUser = async (userId) => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`/homes/${homeId}/users/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      message.success('User removed');
+      fetchUsers();
+    } catch (err) {
+      message.error('Failed to remove user');
+    }
   };
 
   const columns = [
-    {
-      title: 'Name',
-      dataIndex: 'name',
-    },
-    {
-      title: 'Email',
-      dataIndex: 'email',
-    },
-    {
-      title: 'Role',
-      dataIndex: 'role',
-      render: (role) => <Tag color={role === 'owner' ? 'blue' : 'green'}>{role}</Tag>,
-    },
-    {
-      title: 'Rooms',
-      render: (_, user) => user.rooms?.map((r) => <Tag key={r}>{r}</Tag>),
-    },
+    { title: 'Email', dataIndex: 'email' },
+    { title: 'Role', dataIndex: 'role' },
     {
       title: 'Actions',
-      render: (_, user) => (
+      render: (_, record) => (
         <Space>
-          <Button size="small" onClick={() => setAssignRoomsModal(user)}>Assign Rooms</Button>
-          <Button size="small" onClick={() => setAssignDevicesModal(user)}>Assign Devices</Button>
+          <Button danger size="small" onClick={() => handleRemoveUser(record.id)}>
+            Remove
+          </Button>
         </Space>
       ),
     },
@@ -100,89 +105,52 @@ export default function UsersPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h2>Manage Users</h2>
-      <Button type="primary" onClick={() => setVisible(true)} style={{ marginBottom: 16 }}>
-        Add User
+      <h2>Manage Users for: <Tag color="blue">{homeName}</Tag></h2>
+      <Button type="primary" onClick={() => setAddUserVisible(true)} style={{ marginBottom: 16 }}>
+        Assign New User
       </Button>
 
       <Table rowKey="id" dataSource={users} columns={columns} />
 
-      {/* Add User Modal */}
       <Modal
-        title="Add User"
-        open={visible}
-        onCancel={() => setVisible(false)}
-        footer={null}
+        title="Assign Existing User by Email"
+        open={addUserVisible}
+        onCancel={() => setAddUserVisible(false)}
+        onOk={handleAssignUser}
+        okText="Assign"
+        cancelText="Cancel"
       >
-        <Form layout="vertical" onFinish={handleAddUser} form={form}>
-          <Form.Item name="name" label="Name" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="email" label="Email" rules={[{ required: true }]}>
-            <Input type="email" />
-          </Form.Item>
-          <Form.Item name="role" label="Role" rules={[{ required: true }]}>
-            <Select>
-              <Option value="owner">Owner</Option>
-              <Option value="member">Member</Option>
-              <Option value="viewer">Viewer</Option>
-            </Select>
-          </Form.Item>
-          <Button type="primary" htmlType="submit" block>
-            Add
-          </Button>
-        </Form>
+        <Input
+          placeholder="Enter user email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
       </Modal>
 
-      {/* Assign Rooms Modal */}
-      {assignRoomsModal && (
-        <Modal
-          title={`Assign Rooms to ${assignRoomsModal.name}`}
-          open
-          onCancel={() => setAssignRoomsModal(null)}
-          onOk={() =>
-            handleAssignRooms(assignRoomsModal.id, assignRoomsModal._selectedRooms || [])
-          }
-        >
-          <Checkbox.Group
-            options={dummyRooms.map((r) => ({ label: r.name, value: r.id }))}
-            defaultValue={assignRoomsModal.rooms}
-            onChange={(val) => (assignRoomsModal._selectedRooms = val)}
-          />
-        </Modal>
-      )}
+      <div style={{ marginTop: 48 }}>
+        <h3 style={{ marginBottom: 16 }}>Rooms & Devices</h3>
 
-      {/* Assign Devices Modal */}
-      {assignDevicesModal && (
-        <Modal
-          title={`Assign Devices to ${assignDevicesModal.name}`}
-          open
-          onCancel={() => setAssignDevicesModal(null)}
-          footer={null}
-        >
-          {assignDevicesModal.rooms.length === 0 ? (
-            <p>This user has no assigned rooms.</p>
-          ) : (
-            assignDevicesModal.rooms.map((roomId) => (
-              <div key={roomId} style={{ marginBottom: 16 }}>
-                <strong>{dummyRooms.find((r) => r.id === roomId)?.name}</strong>
-                <Checkbox.Group
-                  options={dummyDevices[roomId]?.map((d) => ({
-                    label: d.name,
-                    value: d.id,
-                  }))}
-                  defaultValue={
-                    assignDevicesModal.deviceAccess?.[roomId] || []
-                  }
-                  onChange={(val) =>
-                    handleAssignDevices(assignDevicesModal.id, roomId, val)
-                  }
-                />
-              </div>
-            ))
-          )}
-        </Modal>
-      )}
+        {rooms.length === 0 ? (
+          <p>No rooms found for this home.</p>
+        ) : (
+          rooms.map(room => (
+            <div key={room.id} style={{ marginBottom: 32 }}>
+              <h4 style={{ color: '#1890ff' }}>{room.name}</h4>
+              {devicesByRoom[room.id]?.length > 0 ? (
+                <ul>
+                  {devicesByRoom[room.id].map(device => (
+                    <li key={device.id}>
+                      <strong>{device.name}</strong> — <em>{device.type}</em>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p style={{ color: '#999' }}>No devices in this room</p>
+              )}
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

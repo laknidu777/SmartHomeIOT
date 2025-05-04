@@ -25,7 +25,7 @@
         allowNull: true,
       },
       homeId: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: false,// change this TEMPORARILY
       },
     });

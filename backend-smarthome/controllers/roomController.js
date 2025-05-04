@@ -1,64 +1,130 @@
+// controllers/roomController.js
 import db from '../models/index.js';
-const Room = db.Room;
-const Home = db.Home;
+
+const { Room, Home, UserHome, UserRoom } = db;
 
 export const createRoom = async (req, res) => {
-  const { homeId, name } = req.body;
   try {
-    // Ensure the home belongs to the user
-    const home = await Home.findOne({ where: { id: homeId, userId: req.user.userId } });
-    if (!home) return res.status(403).json({ error: 'Home not found or access denied' });
+    const { name } = req.body;
+    const { homeId } = req.params;
+
+    const home = await Home.findByPk(homeId);
+    if (!home) return res.status(404).json({ message: 'Home not found' });
+
+    if (home.ownerId !== req.user.id) {
+      return res.status(403).json({ message: 'Unauthorized to add room to this home' });
+    }
 
     const room = await Room.create({ name, homeId });
-    res.status(201).json(room);
+
+    // ✅ Automatically assign superadmin to new room
+    await UserRoom.create({ userId: req.user.id, roomId: room.id });
+
+    return res.status(201).json(room);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to create room' });
+    console.error('Error creating room:', err);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
 export const getRoomsByHome = async (req, res) => {
-  const { homeId } = req.params;
   try {
-    const home = await Home.findOne({ where: { id: homeId, userId: req.user.userId } });
-    if (!home) return res.status(403).json({ error: 'Home not found or access denied' });
+    const { homeId } = req.params;
+    const home = await Home.findByPk(homeId);
+    if (!home) return res.status(404).json({ message: 'Home not found' });
+
+    if (req.user.role === 'superadmin') {
+      if (home.ownerId !== req.user.id) {
+        return res.status(403).json({ message: 'Not authorized to view rooms for this home' });
+      }
+    } else {
+      const isAssigned = await UserHome.findOne({
+        where: { userId: req.user.id, homeId },
+      });
+      if (!isAssigned) {
+        return res.status(403).json({ message: 'You are not assigned to this home' });
+      }
+    }
 
     const rooms = await Room.findAll({ where: { homeId } });
-    res.status(200).json(rooms);
+    return res.status(200).json(rooms);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch rooms' });
+    console.error('Error fetching rooms:', err);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
+export const getDevicesForUserRooms = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const rooms = await UserRoom.findAll({ where: { userId } });
+    const roomIds = rooms.map(r => r.roomId);
+
+    const devices = await Device.findAll({ where: { roomId: roomIds } });
+
+    return res.status(200).json(devices);
+  } catch (err) {
+    console.error('Error fetching devices by user rooms:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+export const getUserAssignedRooms = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const rooms = await Room.findAll({
+      include: {
+        model: db.User,
+        where: { id: userId },
+        through: { attributes: [] },
+      },
+    });
+
+    return res.status(200).json(rooms);
+  } catch (err) {
+    console.error('Error fetching user rooms:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 export const updateRoom = async (req, res) => {
-  const { id } = req.params;
-  const { name } = req.body;
-
   try {
-    const room = await Room.findOne({
-      where: { id },
-      include: { model: Home, where: { userId: req.user.userId } },
-    });
-    if (!room) return res.status(403).json({ error: 'Room not found or access denied' });
+    const { roomId } = req.params;
+    const { name } = req.body;
 
-    room.name = name;
+    const room = await Room.findByPk(roomId);
+    if (!room) return res.status(404).json({ message: 'Room not found' });
+
+    const home = await Home.findByPk(room.homeId);
+    if (home.ownerId !== req.user.id) {
+      return res.status(403).json({ message: 'Unauthorized to update this room' });
+    }
+
+    room.name = name || room.name;
     await room.save();
-    res.status(200).json(room);
+    return res.status(200).json(room);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update room' });
+    console.error('Error updating room:', err);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
-export const deleteRoom = async (req, res) => {
-  const { id } = req.params;
 
+export const deleteRoom = async (req, res) => {
   try {
-    const room = await Room.findOne({
-      where: { id },
-      include: { model: Home, where: { userId: req.user.userId } },
-    });
-    if (!room) return res.status(403).json({ error: 'Room not found or access denied' });
+    const { roomId } = req.params;
+
+    const room = await Room.findByPk(roomId);
+    if (!room) return res.status(404).json({ message: 'Room not found' });
+
+    const home = await Home.findByPk(room.homeId);
+    if (home.ownerId !== req.user.id) {
+      return res.status(403).json({ message: 'Unauthorized to delete this room' });
+    }
 
     await room.destroy();
-    res.status(204).send();
+    return res.status(200).json({ message: 'Room deleted successfully' });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to delete room' });
+    console.error('Error deleting room:', err);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };

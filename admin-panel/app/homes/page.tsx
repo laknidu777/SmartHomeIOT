@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, Row, Col, Button, Modal, Form, Input, Typography, message, Spin } from 'antd';
 import axios from '@/lib/api';
+import { useHome } from '@/app/context/HomeContext';
+
 
 const { Title } = Typography;
 
@@ -12,6 +14,7 @@ export default function HomesPage() {
   const [homes, setHomes] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const { setHomeId, setHomeName } = useHome(); 
 
   const fetchHomes = async () => {
     try {
@@ -19,22 +22,29 @@ export default function HomesPage() {
       const res = await axios.get('/homes', {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setHomes(res.data.homes || []);
+      setHomes(res.data || []);
     } catch (err) {
       message.error('Failed to load homes');
     } finally {
       setLoading(false);
     }
   };
+  
 
   useEffect(() => {
     fetchHomes();
   }, []);
 
-  const handleSelectHome = (homeId: string) => {
-    localStorage.setItem('selectedHomeId', homeId);
-    router.push('/dashboard');
-  };
+  // ✅ Get setters from context
+
+const handleSelectHome = (homeId: string) => {
+  const selected = homes.find((h) => h.id === homeId);
+  setHomeId(homeId);            // ✅ Save in React Context
+  setHomeName(selected?.name); // Optional
+  localStorage.setItem('selectedHomeId', homeId); // optional for persistence
+  router.push('/dashboard');
+};
+
 
   const handleAddHome = async (values: { name: string }) => {
     try {

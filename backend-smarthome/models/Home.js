@@ -1,18 +1,25 @@
-export default (sequelize, DataTypes) => {
-    const Home = sequelize.define('Home', {
-      name: DataTypes.STRING,
-      address: DataTypes.STRING,
-      userId: DataTypes.INTEGER,
-    });
-  
-    Home.associate = (models) => {
-      Home.belongsTo(models.User, { foreignKey: 'userId' });
-      Home.hasMany(models.Room, { foreignKey: 'homeId' });
-      Home.hasMany(models.Hub, { foreignKey: 'homeId' });
-      Home.hasMany(models.Room, { foreignKey: 'homeId' });
+// models/Home.js
+import { DataTypes } from 'sequelize';
 
-    };
-  
-    return Home;
+export default (sequelize) => {
+  const Home = sequelize.define('Home', {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+    },
+    name: DataTypes.STRING,
+    ownerId: DataTypes.UUID,
+  });
+
+  Home.associate = (models) => {
+    Home.belongsTo(models.User, { foreignKey: 'ownerId' });
+    Home.hasMany(models.Room, { foreignKey: 'homeId' });
+    Home.belongsToMany(models.User, {
+      through: models.UserHome,
+      foreignKey: 'homeId',
+    });
   };
-  
+
+  return Home;
+};
