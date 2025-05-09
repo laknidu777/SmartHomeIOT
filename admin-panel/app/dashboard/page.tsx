@@ -20,23 +20,16 @@ export default function DashboardPage() {
   const fetchRoomsAndDevices = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
       const homeId = localStorage.getItem('selectedHomeId');
-
-      const res = await axios.get(`/rooms/${homeId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const roomList = res.data || [];
-      setRooms(roomList);
-
+      const res = await axios.get(`/rooms/with-devices/${homeId}`);
+      const roomsWithDevices: { id: string; name: string; devices: any[] }[] = res.data;
+  
       const devices: Record<string, any[]> = {};
-      for (const room of roomList) {
-        const dRes = await axios.get(`/devices/${room.id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        devices[room.id] = dRes.data || [];
+      for (const room of roomsWithDevices) {
+        devices[room.id] = room.devices || [];
       }
+  
+      setRooms(roomsWithDevices.map((r: { id: string; name: string }) => ({ id: r.id, name: r.name })));
       setDevicesByRoom(devices);
     } catch (err) {
       message.error('Failed to fetch rooms/devices');
@@ -44,6 +37,7 @@ export default function DashboardPage() {
       setLoading(false);
     }
   };
+  
 
   useEffect(() => {
     fetchRoomsAndDevices();

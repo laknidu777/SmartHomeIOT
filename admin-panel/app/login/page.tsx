@@ -17,22 +17,18 @@ export default function LoginPage() {
   }
 
   const handleLogin = async (values: LoginFormValues) => {
-    setLoading(true);
+    const { email, password } = values;
     try {
-      const res = await axios.post('users/login', {
-        email: values.email,
-        password: values.password,
-      });
-
-      const token = res.data.token;
+      const res = await axios.post('/auth/login', { email, password });
+  
+      const { token, user } = res.data;
       localStorage.setItem('token', token);
-
-      message.success('Login successful');
-      router.push('/homes'); // go to select home
+      localStorage.setItem('user', JSON.stringify(user));
+  
+      router.push('/homes');
     } catch (err) {
-      message.error((err as any).response?.data?.message || 'Login failed');
-    } finally {
-      setLoading(false);
+      console.error(err);
+      message.error('Login failed');
     }
   };
 

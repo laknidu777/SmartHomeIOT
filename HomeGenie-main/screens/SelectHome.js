@@ -45,7 +45,7 @@ export default function SelectHome() {
         });
 
         if (res.status === 200) {
-          setHomes(res.data.homes || []);
+          setHomes(res.data || []);
         } else {
           console.error("❌ Error loading homes:", res.data.error);
         }

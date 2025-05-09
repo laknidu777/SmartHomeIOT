@@ -66,12 +66,12 @@ export default function Login() {
         password,
       });
 
-      const { token, user } = res.data;
+      const { token } = res.data;
 
       await AsyncStorage.setItem("token", token);
-      await AsyncStorage.setItem("userId", String(user.id));
-      await AsyncStorage.setItem("email", user.email);
-      await AsyncStorage.setItem("name", user.name);
+//      await AsyncStorage.setItem("userId", String(user.id));
+//      await AsyncStorage.setItem("email", user.email);
+//      await AsyncStorage.setItem("name", user.name);
       setAuthToken(token);
 
       navigation.navigate("SelectHome");

@@ -14,13 +14,9 @@ export default (sequelize) => {
       unique: true,
     },
     passwordHash: DataTypes.STRING,
-    role: {
-      type: DataTypes.ENUM('superadmin', 'user'),
-      defaultValue: 'user',
-    },
   });
   User.associate = (models) => {
-    User.hasMany(models.Home, { foreignKey: 'ownerId' });
+    //User.hasMany(models.Home, { foreignKey: 'ownerId' });
     User.belongsToMany(models.Home, {
       through: models.UserHome,
       foreignKey: 'userId',

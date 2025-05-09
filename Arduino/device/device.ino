@@ -273,17 +273,6 @@ void setup() {
     Serial.println("🔄 Will perform factory reset now");
     clearAllCredentials(); // This will reboot the ESP
   }
-  
-  // Special case - if your button is wired backward or inverted
-  // Uncomment this section if needed
-  /*
-  Serial.println("⚙️ NOTE: Reset button is configured with INVERTED logic");
-  // Swap HIGH and LOW for the button
-  #define BUTTON_PRESSED HIGH
-  #define BUTTON_RELEASED LOW
-  */
-
-  // Normal startup continues
   loadHubCreds();
 
   if (hubSsid != "") {
