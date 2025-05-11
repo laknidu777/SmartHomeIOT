@@ -183,7 +183,7 @@ void connectToHubAP() {
     Serial.println("\n✅ Connected to Hub AP");
     isInHubMode = true;
 
-    hubSocket.begin("192.168.4.1", 81, "/");
+    hubSocket.begin("192.168.4.1", 81, "/");  
     hubSocket.onEvent(onHubWsEvent);
   } else {
     Serial.println("\n❌ Failed to connect to Hub AP.");

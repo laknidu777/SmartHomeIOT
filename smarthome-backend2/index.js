@@ -9,6 +9,10 @@ import deviceRoutes from './routes/deviceRoutes.js';
 import hubRoutes from './routes/hubRoutes.js';
 import inviteRoutes from './routes/inviteRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import http from 'http';
+import { Server } from 'socket.io';
+import { handleSocketConnection } from './sockets/socketHandler.js';
+
 
 dotenv.config();
 
@@ -32,11 +36,27 @@ app.use('/api/users', userRoutes);
 
 // ✅ Start the server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, async () => {
+const HOST = process.env.HOST || '0.0.0.0'; // allows access from other devices
+
+
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
+
+handleSocketConnection(io); // 🔌 Attach socket logic
+
+server.listen(PORT, HOST, async () => {
   try {
     await sequelize.authenticate();
-    console.log(`🚀 Server running at http://localhost:${PORT}`);
+    console.log(`🚀 Server running with Socket.IO at http://${HOST}:${PORT}`);
   } catch (error) {
     console.error('❌ Unable to connect to the database:', error);
   }
 });
+
+

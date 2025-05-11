@@ -1,6 +1,6 @@
 import { UserHome, UserHomeRoom, UserHomeDevice, Room, Device } from '../models/index.js';
-
-
+import { deviceSockets, hubSockets } from '../sockets/socketRegistry.js';
+// POST /devices/create
 export const createDevice = async (req, res) => {
   try {
     const { name, espId, houseId, roomId } = req.body;
@@ -14,7 +14,14 @@ export const createDevice = async (req, res) => {
       return res.status(404).json({ message: 'User is not linked to this house' });
     }
 
-    const newDevice = await Device.create({ name, espId, RoomId: roomId });
+    const newDevice = await Device.create({
+      name,
+      espId,
+      RoomId: roomId,
+      homeId: houseId,
+      isOn: false,      // Start as OFF
+      isOnline: false   // Initially offline until ESP32 heartbeat
+    });
 
     await UserHomeDevice.create({
       userHomeId: userHome.id,
@@ -23,9 +30,11 @@ export const createDevice = async (req, res) => {
 
     res.status(201).json({ device: newDevice, message: 'Device created and linked to user' });
   } catch (err) {
+    console.error('Device creation failed:', err);
     res.status(500).json({ message: 'Failed to create device', error: err.message });
   }
 };
+
 export const getDevicesForRoom = async (req, res) => {
     try {
       const { roomId } = req.params;
@@ -57,14 +66,14 @@ export const getDevicesForRoom = async (req, res) => {
 export const updateDevice = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, type, roomId } = req.body;
+    const { name, roomId } = req.body;
 
     const device = await Device.findByPk(id);
     if (!device) return res.status(404).json({ message: 'Device not found' });
 
     device.name = name;
-    device.type = type;
-    device.roomId = roomId;
+    device.RoomId = roomId; // ✅ this is the key fix
+
     await device.save();
 
     res.status(200).json({ message: 'Device updated', device });
@@ -72,7 +81,6 @@ export const updateDevice = async (req, res) => {
     res.status(500).json({ message: 'Failed to update device', error: err.message });
   }
 };
-
 // DELETE /devices/:id
 export const deleteDevice = async (req, res) => {
   try {
@@ -106,5 +114,42 @@ export const assignDeviceToHub = async (req, res) => {
     res.status(500).json({ message: 'Failed to assign device', error: err.message });
   }
 };
+export const toggleDevice = async (req, res) => {
+  try {
+    const device = req.device; // from authorizeDeviceAccess middleware
+    const newState = !device.isOn; // toggle to the opposite state
 
+    const command = `TOGGLE:${newState ? 1 : 0}`;
+
+    if (device.assignedHubId) {
+      // 📡 Device is managed by a hub
+      const hubSocket = hubSockets[device.assignedHubId];
+
+      if (!hubSocket) {
+        return res.status(503).json({ message: 'Hub is offline' });
+      }
+
+      hubSocket.emit('hubToggleCommand', {
+        espId: device.espId,
+        state: newState,
+      });
+    } else {
+      // 📡 Device is directly connected
+      const deviceSocket = deviceSockets[device.espId];
+
+      if (!deviceSocket) {
+        return res.status(503).json({ message: 'Device is offline' });
+      }
+
+      deviceSocket.emit('toggle', { state: newState });
+    }
+
+    // ✅ Don't update DB yet — wait for `TOGGLED:x` from ESP32
+    return res.status(200).json({ message: 'Toggle command sent' });
+
+  } catch (err) {
+    console.error('Toggle Error:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
 

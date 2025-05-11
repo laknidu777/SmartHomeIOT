@@ -11,12 +11,13 @@ const { Title } = Typography;
 const { TabPane } = Tabs;
 
 export default function HubsPage() {
-  const [hubs, setHubs] = useState<{ hubId: string; name: string; ssid: string }[]>([]);
+  const [hubs, setHubs] = useState<{ espId: string; name: string; ssid: string }[]>([]);
   const [assignedDevices, setAssignedDevices] = useState([]);
   const [unassignedDevices, setUnassignedDevices] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  const [selectedHub, setSelectedHub] = useState<{ hubId: string; name: string; ssid: string; password: string } | null>(null);
+  const [selectedHub, setSelectedHub] = useState<{ id: string; espId: string; name: string; ssid: string; password: string } | null>(null); 
+  //const [selectedHub, setSelectedHub] = useState<{ espId: string; name: string; ssid: string; password: string } | null>(null);
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
 
@@ -51,38 +52,50 @@ export default function HubsPage() {
     return secondsAgo < 65;
   };
 
-  const handleSaveHub = async (values: { hubId?: string; name: string; ssid: string; password: string }) => {
-    try {
-      const token = localStorage.getItem('token');
-      const headers = { Authorization: `Bearer ${token}` };
+  const handleSaveHub = async (values: { name: string; espId: string; ssid: string; password: string }) => {
+  try {
+    const token = localStorage.getItem('token');
+    const headers = { Authorization: `Bearer ${token}` };
+    const homeId = localStorage.getItem('selectedHomeId');
 
-      if (editMode && selectedHub) {
-        await axios.patch(`/hubs/${selectedHub.hubId}`, values, { headers });
-        message.success('Hub updated');
-      } else {
-        await axios.post('/hubs', { ...values, homeId: localStorage.getItem('selectedHomeId') }, { headers });
-        message.success('Hub added');
-      }
-      form.resetFields();
-      setModalVisible(false);
-      fetchAll();
-    } catch (err) {
-      message.error('Failed to save hub');
+    const payload = {
+      ...values,
+      houseId: homeId,
+    };
+
+    //console.log('🚀 Submitting hub payload:', payload);
+
+    if (editMode) {
+      await axios.patch(`/hubs/${selectedHub?.id}`, payload, { headers });
+      message.success('Hub updated');
+    } else {
+      await axios.post('/hubs/create', payload, { headers }); // ✅ use POST
+      message.success('Hub added');
     }
-  };
+
+    form.resetFields();
+    setModalVisible(false);
+    fetchAll();
+  } catch (err) {
+    //console.error('❌ Hub error:', err.response?.data || err.message);
+    message.error('Failed to save hub');
+  }
+};
+
 
   const handleDeleteHub = async (hubId: string) => {
-    try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`/hubs/${hubId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      message.success('Hub deleted');
-      fetchAll();
-    } catch (err) {
-      message.error('Failed to delete hub');
-    }
-  };
+  try {
+    const token = localStorage.getItem('token');
+    await axios.delete(`/hubs/${hubId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    message.success('Hub deleted');
+    fetchAll();
+  } catch (err) {
+    message.error('Failed to delete hub');
+  }
+};
+
 
   const handleAssign = async (deviceId: string, hubId: string) => {
     try {
@@ -133,10 +146,17 @@ export default function HubsPage() {
         <Space>
           <Button onClick={() => {
             setSelectedHub({
-              hubId: record.id,
+              id: record.id,
+              espId: record.espId,
               name: record.name,
               ssid: record.ssid || '',
               password: record.password || '',
+            });
+            form.setFieldsValue({
+              espId: record.id,
+              name: record.name,
+              ssid: record.ssid,
+              password: record.password,
             });
             setEditMode(true);
             form.setFieldsValue(record);
@@ -165,9 +185,9 @@ export default function HubsPage() {
       </Button>
 
       <Table
-        rowKey="hubId"
+        rowKey="id"
         columns={hubColumns}
-        dataSource={hubs.map(hub => ({ ...hub, id: hub.hubId }))}
+        dataSource={hubs}
         pagination={false}
         style={{ marginBottom: 32 }}
       />
@@ -206,7 +226,7 @@ export default function HubsPage() {
                     onChange={(value) => handleAssign(record.id, value)}
                   >
                     {hubs.map((hub) => (
-                      <Select.Option key={hub.hubId} value={hub.hubId}>
+                      <Select.Option key={hub.espId} value={hub.espId}>
                         {hub.name} ({hub.ssid})
                       </Select.Option>
                     ))}
@@ -225,7 +245,7 @@ export default function HubsPage() {
         footer={null}
       >
         <Form layout="vertical" form={form} onFinish={handleSaveHub}>
-          <Form.Item name="hubId" label="Hub ID" rules={[{ required: true }]}>
+          <Form.Item name="espId" label="Hub ID" rules={[{ required: true }]}>
             <Input disabled={editMode} />
           </Form.Item>
           <Form.Item name="name" label="Hub Name" rules={[{ required: true }]}>
