@@ -1,45 +1,44 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Form, Input, Button, Typography, Card, message, Spin } from 'antd';
+import Link from 'next/link';
 import axios from '../../lib/api';
-import Link from 'next/link'; // make sure this is imported
-
 
 const { Title, Text } = Typography;
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [pageReady, setPageReady] = useState(false); // for spinner
+  const [pageReady, setPageReady] = useState(false);
 
-  interface LoginFormValues {
+  interface SignupFormValues {
     email: string;
     password: string;
+    name: string;
+    fullName: string;
   }
 
-  useEffect(() => {
-    // Simulate style/fonts loading
+  // simulate style/font loading
+  useState(() => {
     const timer = setTimeout(() => {
       setPageReady(true);
-    }, 300); // adjust if needed
+    }, 300);
     return () => clearTimeout(timer);
-  }, []);
+  });
 
-  const handleLogin = async (values: LoginFormValues) => {
-    const { email, password } = values;
+  const handleSignup = async (values: SignupFormValues) => {
+    const { email, password, name, fullName } = values;
     try {
       setLoading(true);
-      const res = await axios.post('/auth/login', { email, password });
-      const { token, user } = res.data;
-
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
-      router.push('/homes');
-    } catch (err) {
+      await axios.post('/auth/signup', { email, password, name, fullName });
+      message.success('Account created successfully! Please log in.');
+      router.push('/login');
+    } catch (err: any) {
       console.error(err);
-      message.error('Login failed. Please check your credentials.');
+      const errorMsg = err?.response?.data?.message || 'Signup failed';
+      message.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -69,7 +68,7 @@ export default function LoginPage() {
     }}>
       <Card
         style={{
-          width: 420,
+          width: 460,
           borderRadius: 12,
           boxShadow: '0 8px 24px rgba(0, 0, 0, 0.1)',
           border: 'none',
@@ -80,10 +79,26 @@ export default function LoginPage() {
           AUTOHOME.<Text strong style={{ color: '#000' }}>GLOBAL</Text>
         </Title>
         <Text type="secondary" style={{ display: 'block', textAlign: 'center', marginBottom: 24 }}>
-          Welcome back — control your smart space
+          Create your smart space account
         </Text>
 
-        <Form layout="vertical" onFinish={handleLogin}>
+        <Form layout="vertical" onFinish={handleSignup}>
+          <Form.Item
+            label="Name"
+            name="name"
+            rules={[{ required: true, message: 'Please enter your short name' }]}
+          >
+            <Input placeholder="john" size="large" />
+          </Form.Item>
+
+          <Form.Item
+            label="Full Name"
+            name="fullName"
+            rules={[{ required: true, message: 'Please enter your full name' }]}
+          >
+            <Input placeholder="John Thilakawardhana" size="large" />
+          </Form.Item>
+
           <Form.Item
             label="Email"
             name="email"
@@ -122,13 +137,14 @@ export default function LoginPage() {
             onMouseDown={(e) => (e.currentTarget.style.backgroundColor = '#1e4d56')}
             onMouseUp={(e) => (e.currentTarget.style.backgroundColor = '#3f7d87')}
           >
-            Login
+            Sign Up
           </Button>
+
           <div style={{ textAlign: 'center', marginTop: 16 }}>
             <Text type="secondary">
-              Don’t have an account?{' '}
-              <Link href="/signup" style={{ color: '#2B6873', fontWeight: 500 }}>
-                Sign up
+              Already have an account?{' '}
+              <Link href="/login" style={{ color: '#2B6873', fontWeight: 500 }}>
+                Log in
               </Link>
             </Text>
           </div>

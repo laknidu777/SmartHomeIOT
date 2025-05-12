@@ -9,7 +9,7 @@ import AppSidebar from './sidebar/page';
 import { ReactNode } from 'react';
 
 const { Content } = Layout;
-const excludedRoutes = ['/login', '/homes'];
+const excludedRoutes = ['/login', '/homes' , '/signup', '/forgot-password', '/reset-password'];
 
 export default function ProtectedLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -19,14 +19,14 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
   if (isExcluded) return children;
 
   return (
-    <Layout style={{ minHeight: '100vh' }}> 
+    <Layout> 
       {/* <AppSidebar collapsed={collapsed} /> */}
        {/* Show Sidebar only if collapsed is false */}
        {!collapsed && <AppSidebar open={!collapsed} onClose={() => setCollapsed(true)} />}
       <Layout>
         <AppHeader onToggle={() => setCollapsed(!collapsed)} />
-        <Content style={{ margin: '24px 16px 0' }}>
-          <div style={{ padding: 24, minHeight: '80vh', background: '#fff' }}>
+        <Content style={{ margin: '0px 0px 0' }}>
+          <div style={{ padding: 0, minHeight: '80vh', background: '#fff' }}>
             {children}
           </div>
         </Content>

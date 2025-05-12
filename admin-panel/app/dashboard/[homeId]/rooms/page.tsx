@@ -12,6 +12,12 @@ import {
   Space,
   Popconfirm,
 } from 'antd';
+import {
+  HomeOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  PlusOutlined,
+} from '@ant-design/icons';
 import { useParams } from 'next/navigation';
 import axios from '@/lib/api';
 
@@ -84,20 +90,28 @@ export default function RoomsPage() {
       title: 'Room Name',
       dataIndex: 'name',
       key: 'name',
+      render: (text: string) => (
+        <span>
+          <HomeOutlined style={{ marginRight: 6, color: '#2B6873' }} />
+          <strong>{text}</strong>
+        </span>
+      ),
     },
     {
       title: 'Actions',
       key: 'actions',
       render: (_: any, record: any) => (
         <Space>
-          <Button onClick={() => handleEditRoom(record)}>Edit</Button>
+          <Button icon={<EditOutlined />} onClick={() => handleEditRoom(record)}>
+            Edit
+          </Button>
           <Popconfirm
             title="Are you sure to delete this room?"
             onConfirm={() => handleDeleteRoom(record.id)}
             okText="Yes"
             cancelText="No"
           >
-            <Button danger>Delete</Button>
+            <Button danger icon={<DeleteOutlined />}>Delete</Button>
           </Popconfirm>
         </Space>
       ),
@@ -105,11 +119,28 @@ export default function RoomsPage() {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={2}>Rooms</Title>
-        <Button type="primary" onClick={handleAddRoom}>
-          + Add Room
+    <div
+      style={{
+        padding: '40px 24px',
+        minHeight: '100vh',
+        background: 'linear-gradient(to right, #e0f2f1, #f5f5f5)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 24,
+        }}
+      >
+        <Title level={2} style={{ color: '#2B6873', margin: 0 }}>Rooms</Title>
+        <Button
+          type="primary"
+          onClick={handleAddRoom}
+          style={{ backgroundColor: '#2B6873', borderColor: '#2B6873' }}
+        >
+          <PlusOutlined /> Add Room
         </Button>
       </div>
 
@@ -120,6 +151,7 @@ export default function RoomsPage() {
         bordered
         loading={loading}
         pagination={false}
+        style={{ backgroundColor: 'white', borderRadius: 12 }}
       />
 
       <Modal
@@ -127,6 +159,7 @@ export default function RoomsPage() {
         title={editingRoom ? 'Edit Room' : 'Add Room'}
         onCancel={() => setModalVisible(false)}
         onOk={() => form.submit()}
+        centered
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
@@ -134,10 +167,11 @@ export default function RoomsPage() {
             name="name"
             rules={[{ required: true, message: 'Please enter a room name' }]}
           >
-            <Input />
+            <Input placeholder="Living Room" />
           </Form.Item>
         </Form>
       </Modal>
     </div>
   );
 }
+    

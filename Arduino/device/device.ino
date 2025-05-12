@@ -3,6 +3,9 @@
 #include <SocketIoClient.h>
 #include <WebSocketsClient.h>
 #include <Preferences.h>
+#include <ArduinoJson.h>
+
+
 
 String espId = "";  // <-- Will be generated from chip ID
 
@@ -25,6 +28,29 @@ bool buttonPressed = false;
 unsigned long lastBlink = 0;
 bool ledState = false;
 
+
+String loadUuidFromPreferences() {
+  preferences.begin("uuid", true); // read-only mode
+  String uuid = preferences.getString("value", "");
+  preferences.end();
+  return uuid;
+}
+
+void saveUuidToPreferences(const String& uuid) {
+  preferences.begin("uuid", false); // write mode
+  preferences.putString("value", uuid);
+  preferences.end();
+  Serial.println("✅ UUID saved to Preferences: " + uuid);
+}
+
+void clearUuidFromPreferences() {
+  preferences.begin("uuid", false);
+  preferences.clear();
+  preferences.end();
+  Serial.println("🧹 UUID cleared from Preferences");
+}
+
+
 void saveHubCreds(String ssid, String password) {
   preferences.begin("hub", false);
   preferences.putString("ssid", ssid);
@@ -43,7 +69,7 @@ void loadHubCreds() {
 
 void clearAllCredentials() {
   Serial.println("🧹 CLEARING ALL CREDENTIALS!");
-  
+  clearUuidFromPreferences();
   // Make sure all LED is solid on for visual feedback
   digitalWrite(LED_PIN, HIGH);
   
@@ -197,38 +223,92 @@ void handleBackendEvents() {
     String json = "{\"espId\":\"" + espId + "\"}";
     backendSocket.emit("registerDevice", json.c_str());
   });
+  backendSocket.on("assignUuid", [](const char *payload, size_t length) {
+  String raw = String(payload).substring(0, length);
+  raw.trim();
 
-  backendSocket.on("deviceCommand", [](const char *payload, size_t length) {
-    String msg = String(payload).substring(0, length);
-    Serial.printf("📥 Received deviceCommand: %s\n", msg.c_str());
+  // Handle if it's wrapped like "{\"uuid\":\"...\"}"
+  if (raw.startsWith("\"") && raw.endsWith("\"")) {
+    raw = raw.substring(1, raw.length() - 1); // remove outer quotes
+    raw.replace("\\\"", "\"");                // unescape internal quotes
+  }
 
-    if (msg == "1") {
+  DynamicJsonDocument doc(128);
+  DeserializationError err = deserializeJson(doc, raw);
+
+  if (!err) {
+    String uuid = doc["uuid"];
+    Serial.println("📥 Received assignUuid: " + uuid);
+    saveUuidToPreferences(uuid);
+  } else {
+    Serial.println("❌ Failed to parse assignUuid JSON");
+  }
+});
+
+
+backendSocket.on("deviceCommand", [](const char *payload, size_t length) {
+  String raw = String(payload).substring(0, length);
+  raw.trim();
+
+  Serial.printf("📥 Received deviceCommand (raw): %s\n", raw.c_str());
+
+  // ✅ Step 1: Unwrap outer quotes if present
+  if (raw.startsWith("\"") && raw.endsWith("\"")) {
+  raw = raw.substring(1, raw.length() - 1);  // strip outer quotes
+
+  // Unescape all \ sequences
+  raw.replace("\\\"", "\"");
+  raw.replace("\\\\", "\\");
+}
+
+
+  Serial.printf("✅ Cleaned JSON string: %s\n", raw.c_str());
+
+  // ✅ Step 2: Parse the cleaned JSON
+  DynamicJsonDocument doc(128);
+  DeserializationError err = deserializeJson(doc, raw);
+
+  if (err) {
+    Serial.print("❌ JSON Parse Failed: ");
+    Serial.println(err.c_str());
+    return;
+  }
+
+  // ✅ Step 3: Extract and compare UUID
+  String cmdUuid = doc["uuid"];
+  String cmd = doc["command"];
+  String storedUuid = loadUuidFromPreferences();
+
+  Serial.println("🧾 Stored UUID: " + storedUuid);
+  Serial.println("🔑 Received UUID: " + cmdUuid);
+
+  if (cmdUuid == storedUuid) {
+    if (cmd == "1") {
       digitalWrite(RELAY_PIN, HIGH);
-      Serial.println("⚡ Relay turned ON (via Backend)");
-    } else if (msg == "0") {
+      Serial.println("⚡ Relay ON ✅ UUID match");
+      backendSocket.emit("message", "\"TOGGLED:1\"");
+    } else if (cmd == "0") {
       digitalWrite(RELAY_PIN, LOW);
-      Serial.println("⚡ Relay turned OFF (via Backend)");
-    } else if (msg.startsWith("ASSIGN:")) {
-      int sep = msg.indexOf(",");
-      String ssid = msg.substring(7, sep);
-      String pw = msg.substring(sep + 1);
-      Serial.printf("📦 Assigned to Hub: %s / %s\n", ssid.c_str(), pw.c_str());
-
-      saveHubCreds(ssid, pw);
-      delay(1000);
-      ESP.restart();
-    } else if (msg == "reset") {
-      // Allow remote reset via backend
-      clearAllCredentials();
+      Serial.println("⚡ Relay OFF ✅ UUID match");
+      backendSocket.emit("message", "\"TOGGLED:0\"");
+    } else {
+      Serial.printf("❓ Unknown command: %s\n", cmd.c_str());
     }
-  });
-  backendSocket.on("disconnect", [](const char* payload, size_t length) {
-  Serial.println("❌ Disconnected from Backend WS");
-}); 
+  } else {
+    Serial.println("🚫 UUID mismatch – command rejected");
+  }
+});
 
+  backendSocket.on("disconnect", [](const char* payload, size_t length) {
+    Serial.println("❌ Disconnected from Backend WS");
+  });
 }
 
 void setup() {
+
+  String loadedUuid = loadUuidFromPreferences();
+  Serial.println("🧾 UUID from Prefereces: " + loadedUuid);
+
   Serial.begin(115200);
   delay(1000); // Give serial time to connect
   

@@ -1,8 +1,20 @@
 'use client';
-import { Drawer, Menu } from 'antd';
+
+import {
+  HomeOutlined,
+  DashboardOutlined,
+  UserOutlined,
+  AppstoreOutlined,
+  UsbOutlined,
+  ClockCircleOutlined,
+} from '@ant-design/icons';
+import { Drawer, Menu, Typography } from 'antd';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+
+const { Title } = Typography;
+
 export default function AppSidebar({
   open,
   onClose,
@@ -20,39 +32,67 @@ export default function AppSidebar({
 
   return (
     <Drawer
-      title="SmartHome"
+      title={
+        <Title level={4} style={{ color: '#2B6873', margin: 0 }}>
+          AUTOHOME.GLOBAL
+        </Title>
+      }
       placement="left"
       onClose={onClose}
       open={open}
       bodyStyle={{ padding: 0 }}
+      headerStyle={{ background: '#f0f2f5' }}
     >
       <Menu
         mode="inline"
         selectedKeys={[pathname]}
-        onClick={onClose} // auto-close drawer when link is clicked
-      >
-        <Menu.Item key="/homes"><Link href="/homes">Homes</Link></Menu.Item>
-        <Menu.Item key="/dashboard"><Link href="/dashboard">Dashboard</Link></Menu.Item>
-        {/* <Menu.Item key="/dashboard/${homeId}/rooms"><Link href="/rooms">Rooms</Link></Menu.Item> */}
-        {/* <Menu.Item key="/devices"><Link href="/devices">Devices</Link></Menu.Item> */}
-        {/* <Menu.Item key="/hubs"><Link href="/hubs">Hubs</Link></Menu.Item> */}
-        {homeId && (
-          <>
-            <Menu.Item key="/Rooms">
-              <Link href={`/dashboard/${homeId}/rooms`}>Rooms</Link>
-            </Menu.Item>
-            <Menu.Item key="/hubs">
-              <Link href={`/dashboard/${homeId}/hub`}>Hubs</Link>
-            </Menu.Item>
-            <Menu.Item key="/devices">
-              <Link href={`/dashboard/${homeId}/devices`}>Devices</Link>
-            </Menu.Item>
-            <Menu.Item key="/users">
-              <Link href={`/dashboard/${homeId}/users`}>Users</Link>
-            </Menu.Item>
-          </>
-        )}
-      </Menu>
+        onClick={onClose}
+        style={{
+          borderRight: 0,
+        }}
+        theme="light"
+        items={[
+          {
+            key: '/homes',
+            icon: <HomeOutlined style={{ color: '#2B6873' }} />,
+            label: <Link href="/homes">Homes</Link>,
+          },
+          {
+            key: '/dashboard',
+            icon: <DashboardOutlined style={{ color: '#2B6873' }} />,
+            label: <Link href="/dashboard">Dashboard</Link>,
+          },
+          ...(homeId
+            ? [
+                {
+                  key: '/users',
+                  icon: <UserOutlined style={{ color: '#2B6873' }} />,
+                  label: <Link href={`/dashboard/${homeId}/users`}>Users</Link>,
+                },
+                {
+                  key: '/rooms',
+                  icon: <AppstoreOutlined style={{ color: '#2B6873' }} />,
+                  label: <Link href={`/dashboard/${homeId}/rooms`}>Rooms</Link>,
+                },
+                {
+                  key: '/hubs',
+                  icon: <UsbOutlined style={{ color: '#2B6873' }} />,
+                  label: <Link href={`/dashboard/${homeId}/hub`}>Hubs</Link>,
+                },
+                {
+                  key: '/devices',
+                  icon: <UsbOutlined style={{ color: '#2B6873' }} />,
+                  label: <Link href={`/dashboard/${homeId}/devices`}>Devices</Link>,
+                },
+                {
+                  key: '/schedules',
+                  icon: <ClockCircleOutlined style={{ color: '#2B6873' }} />,
+                  label: <Link href={`/dashboard/${homeId}/schedules`}>Schedules</Link>,
+                },
+              ]
+            : []),
+        ]}
+      />
     </Drawer>
   );
 }

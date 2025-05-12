@@ -24,6 +24,9 @@ import UserHomeRoomModel from './UserHomeRoom.js';
 import UserHomeDeviceModel from './UserHomeDevice.js';
 import HubDeviceModel from './HubDevice.js';
 import EmailVerificationCodeModel from './EmailVerificationCode.js';
+import ScheduleModel from './Schedule.js';
+import NoUserDeviceModel from './noUserDevice.js';
+
 
 // Init models
 const User = UserModel(sequelize);
@@ -36,6 +39,9 @@ const UserHomeRoom = UserHomeRoomModel(sequelize);
 const UserHomeDevice = UserHomeDeviceModel(sequelize);
 const HubDevice = HubDeviceModel(sequelize);
 const EmailVerificationCode = EmailVerificationCodeModel(sequelize);
+const Schedule = ScheduleModel(sequelize);
+const NoUserDevice = NoUserDeviceModel(sequelize); 
+
 
 // Associations
 
@@ -72,12 +78,19 @@ Device.belongsToMany(UserHome, { through: UserHomeDevice, foreignKey: 'deviceId'
 UserHomeDevice.belongsTo(Device, { foreignKey: 'deviceId' });
 Device.hasMany(UserHomeDevice, { foreignKey: 'deviceId' });
 
+UserHomeDevice.belongsTo(UserHome, { foreignKey: 'userHomeId' });
+UserHome.hasMany(UserHomeDevice, { foreignKey: 'userHomeId' });
+
+
 
 // Hub ↔ Devices
 Hub.hasMany(HubDevice, { foreignKey: 'hubId' });
 Device.hasOne(HubDevice, { foreignKey: 'deviceId' });
 HubDevice.belongsTo(Hub, { foreignKey: 'hubId' });
 HubDevice.belongsTo(Device, { foreignKey: 'deviceId' });
+
+//Schedule ↔ Devices
+Schedule.belongsTo(UserHomeDevice, { foreignKey: 'userHomeDeviceId' });
 
 export {
   sequelize,
@@ -91,4 +104,6 @@ export {
   UserHomeDevice,
   HubDevice,
   EmailVerificationCode,
+  Schedule,
+  NoUserDevice,
 };

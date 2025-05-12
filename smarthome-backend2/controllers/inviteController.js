@@ -31,12 +31,37 @@ export const sendInviteCode = async (req, res) => {
       expiresAt,
     });
 
+    // await transporter.sendMail({
+    //   from: process.env.EMAIL_USER,
+    //   to: email,
+    //   subject: 'AUTOHOME.GLOBAL Invitation Code for Smart Home',
+    //   text: `You've been invited to join a Smart Home.\nYour code is: ${code}\nIt expires in 10 minutes.`,
+    // });
     await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: 'AUTOHOME.GLOBAL Invitation Code for Smart Home',
-      text: `You've been invited to join a Smart Home.\nYour code is: ${code}\nIt expires in 10 minutes.`,
-    });
+  from: process.env.EMAIL_USER,
+  to: email,
+  subject: 'AUTOHOME.GLOBAL Invitation Code for Smart Home',
+  html: `
+    <div style="font-family: 'Segoe UI', sans-serif; background-color: #f5f5f5; padding: 32px;">
+      <div style="max-width: 500px; margin: auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.05); padding: 32px;">
+        <h2 style="color: #2B6873; margin-top: 0;">You're Invited to AUTOHOME.<span style="color: black;">GLOBAL</span></h2>
+        <p style="font-size: 15px; color: #555;">You've been invited to join a smart home on the AUTOHOME.GLOBAL platform.</p>
+        
+        <div style="margin: 24px 0; padding: 20px; background-color: #e0f2f1; border-left: 5px solid #2B6873; border-radius: 8px;">
+          <p style="margin: 0; font-size: 14px; color: #333;">Your invite code is:</p>
+          <h1 style="margin: 8px 0 0; color: #2B6873; font-size: 28px; letter-spacing: 2px;">${code}</h1>
+        </div>
+
+        <p style="font-size: 14px; color: #777;">This code will expire in <strong>10 minutes</strong>.</p>
+
+        <hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;" />
+
+        <p style="font-size: 13px; color: #999;">If you did not expect this email, you can safely ignore it.</p>
+        <p style="font-size: 13px; color: #aaa;">&copy; ${new Date().getFullYear()} AUTOHOME.GLOBAL</p>
+      </div>
+    </div>
+  `
+  });
 
     res.status(200).json({ message: 'Verification code sent to user email' });
   } catch (err) {

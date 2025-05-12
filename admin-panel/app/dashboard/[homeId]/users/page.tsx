@@ -14,6 +14,12 @@ import {
   Row,
   Col,
 } from 'antd';
+import {
+  UserOutlined,
+  AppstoreOutlined,
+  BulbOutlined,
+  PlusCircleOutlined,
+} from '@ant-design/icons';
 import axios from '@/lib/api';
 
 const { Title } = Typography;
@@ -135,10 +141,12 @@ export default function UserManagementTable() {
 
   const columns = [
     {
-      title: 'Users',
+      title: 'User',
       dataIndex: 'email',
       key: 'email',
-      render: (email: string) => <strong>{email}</strong>,
+      render: (email: string) => (
+        <Space><UserOutlined style={{ color: '#2B6873' }} /><strong>{email}</strong></Space>
+      ),
     },
     {
       title: 'Assigned Rooms',
@@ -146,10 +154,10 @@ export default function UserManagementTable() {
       render: (_: any, record: any) => (
         <Space direction="vertical">
           {(userRoomsMap[record.id] || []).map((room: any) => (
-            <Tag key={room.id}>{room.name}</Tag>
+            <Tag icon={<AppstoreOutlined />} color="blue" key={room.id}>{room.name}</Tag>
           ))}
-          <Button type="link" onClick={() => openRoomModal(record)}>
-            + Add Rooms
+          <Button type="link" icon={<PlusCircleOutlined />} onClick={() => openRoomModal(record)}>
+            Add Rooms
           </Button>
         </Space>
       ),
@@ -160,10 +168,10 @@ export default function UserManagementTable() {
       render: (_: any, record: any) => (
         <Space direction="vertical">
           {(userDevicesMap[record.id] || []).map((device: any) => (
-            <Tag key={device.id}>{device.name}</Tag>
+            <Tag icon={<BulbOutlined />} color="green" key={device.id}>{device.name}</Tag>
           ))}
-          <Button type="link" onClick={() => openDeviceModal(record)}>
-            + Add Devices
+          <Button type="link" icon={<PlusCircleOutlined />} onClick={() => openDeviceModal(record)}>
+            Add Devices
           </Button>
         </Space>
       ),
@@ -175,13 +183,26 @@ export default function UserManagementTable() {
   }, [homeId]);
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={2}>Users & Access</Title>
-        <Button type="primary" onClick={() => router.push(`/dashboard/${homeId}/invite`)}>
-      + Add User
-    </Button>
-
+    <div style={{ padding: '40px 24px', background: 'linear-gradient(to right, #e0f2f1, #f5f5f5)', minHeight: '100vh' }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 12,
+          marginBottom: 24,
+        }}
+      >
+        <Title level={2} style={{ color: '#2B6873', margin: 0 }}>Users & Access</Title>
+        <Button
+          type="primary"
+          onClick={() => router.push(`/dashboard/${homeId}/invite`)}
+          style={{ backgroundColor: '#2B6873', borderColor: '#2B6873' }}
+        >
+          + Add User
+        </Button>
       </div>
 
       <Table
@@ -190,6 +211,8 @@ export default function UserManagementTable() {
         rowKey="id"
         bordered
         pagination={false}
+        scroll={{ x: 'max-content' }}
+        style={{ backgroundColor: '#ffffff', borderRadius: 8 }}
       />
 
       {/* Room Modal */}
@@ -207,7 +230,7 @@ export default function UserManagementTable() {
         >
           <Row gutter={[8, 8]}>
             {allRooms.map((room) => (
-              <Col span={8} key={room.id}>
+              <Col xs={24} sm={12} md={8} key={room.id}>
                 <Checkbox value={room.id}>{room.name}</Checkbox>
               </Col>
             ))}
@@ -230,7 +253,7 @@ export default function UserManagementTable() {
         >
           <Row gutter={[8, 8]}>
             {allDevices.map((device) => (
-              <Col span={8} key={device.id}>
+              <Col xs={24} sm={12} md={8} key={device.id}>
                 <Checkbox value={device.id}>{device.name}</Checkbox>
               </Col>
             ))}

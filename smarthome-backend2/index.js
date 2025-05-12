@@ -9,9 +9,12 @@ import deviceRoutes from './routes/deviceRoutes.js';
 import hubRoutes from './routes/hubRoutes.js';
 import inviteRoutes from './routes/inviteRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import scheduleRoutes from './routes/scheduleRoutes.js';
 import http from 'http';
-import { Server } from 'socket.io';
-import { handleSocketConnection } from './sockets/socketHandler.js';
+import socketIo from 'socket.io';
+import { registerDeviceSocketHandlers } from './sockets/deviceSocket.js';
+import './scheduleRunner.js';
+
 
 
 dotenv.config();
@@ -31,6 +34,7 @@ app.use('/api/devices', deviceRoutes);
 app.use('/api/hubs', hubRoutes);
 app.use('/api/invites', inviteRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/schedules', scheduleRoutes);
 
 
 
@@ -41,14 +45,15 @@ const HOST = process.env.HOST || '0.0.0.0'; // allows access from other devices
 
 const server = http.createServer(app);
 
-const io = new Server(server, {
+const io = socketIo(server, {
   cors: {
     origin: '*',
     methods: ['GET', 'POST']
   }
 });
 
-handleSocketConnection(io); // 🔌 Attach socket logic
+registerDeviceSocketHandlers(io);
+ // 🔌 Attach socket logic
 
 server.listen(PORT, HOST, async () => {
   try {
