@@ -141,65 +141,91 @@ void checkResetButton() {
 }
 // ===== HUB MODE =====
 void onHubWsEvent(WStype_t type, uint8_t * payload, size_t length) {
-  if (type == WStype_CONNECTED) {
-    Serial.println("🔌 Connected to Hub WS");
-    hubSocket.sendTXT("HEARTBEAT:" + espId);
-  }
-  else if (type == WStype_TEXT) {
-  String msg = String((char*)payload);
-  Serial.printf("📥 Command from Hub: %s\n", msg.c_str());
-  
-  if (msg.startsWith("COMMAND:")) {
-    Serial.printf("🧪 Raw COMMAND received: %s\n", msg.c_str());
-
-    int firstColon = msg.indexOf(':');
-    int secondColon = msg.indexOf(':', firstColon + 1);
-    if (firstColon != -1 && secondColon != -1) {
-      String targetId = msg.substring(firstColon + 1, secondColon);
-      String command = msg.substring(secondColon + 1);
-      targetId.trim();
-      command.trim();
-
-      Serial.printf("🔍 Parsed target: '%s' | local espId: '%s'\n", targetId.c_str(), espId.c_str());
-      Serial.printf("⚙️ Parsed command: '%s' (length: %d)\n", command.c_str(), command.length());
-
-      if (targetId == espId) {
-        if (command == "1") {
-        digitalWrite(RELAY_PIN, HIGH);
-        Serial.println("⚡ Relay turned ON");
-      } else if (command == "0") {
-        digitalWrite(RELAY_PIN, LOW);
-        Serial.println("⚡ Relay turned OFF");
-      }
- 
-        else if (command == "reset") {
-          Serial.println("🔄 RESET command received and MATCHED - clearing credentials now!");
-          // Add a small delay to ensure the response is fully sent
-          delay(500);
-          clearAllCredentials();  // This should reboot the ESP
-        }
-        else {
-          Serial.printf("❓ Unknown command received: '%s'\n", command.c_str());
-        }
-      } else {
-        Serial.println("🚫 Command target ID does not match this ESP32");
-      }
-    } else {
-      Serial.println("❌ Malformed COMMAND string - couldn't find both colons");
+  switch (type) {
+    case WStype_CONNECTED: {
+      String heartbeat = "HEARTBEAT:" + espId;
+      hubSocket.sendTXT(heartbeat);
+      Serial.println("❤️ Sent initial heartbeat to Hub: " + heartbeat);
+      break;
     }
+      
+    case WStype_DISCONNECTED:{
+      Serial.println("❌ Disconnected from Hub WS");
+      break;
+    }
+    case WStype_TEXT:
+      {
+        String msg = String((char*)payload);
+        Serial.printf("📥 Message from Hub: %s\n", msg.c_str());
+        
+        // Handle ASSIGN command specifically
+        if (msg.startsWith("ASSIGN:")) {
+          Serial.println("📦 Received ASSIGN command from hub");
+          String creds = msg.substring(7); // Skip "ASSIGN:"
+          int comma = creds.indexOf(',');
+          
+          if (comma != -1) {
+            String ssid = creds.substring(0, comma);
+            String password = creds.substring(comma + 1);
+            ssid.trim(); 
+            password.trim();
+            
+            Serial.printf("🔐 Parsed SSID: %s | Password: %s\n", ssid.c_str(), password.c_str());
+            saveHubCreds(ssid, password);
+            
+            // Confirm receipt before restarting
+            hubSocket.sendTXT("ASSIGN_ACK:" + espId);
+            Serial.println("✅ Sent acknowledgment to hub");
+            
+            delay(1000); // let socket process before reset
+            ESP.restart();  // reboot to reconnect using new hub credentials
+          } else {
+            Serial.println("❌ Malformed ASSIGN string – missing comma");
+          }
+        }
+        // Handle COMMAND messages 
+        else if (msg.startsWith("COMMAND:")) {
+          String command = msg.substring(8); // Remove "COMMAND:"
+          int i = command.indexOf(':');
+
+          if (i != -1) {
+            String incomingUuid = command.substring(0, i);
+            String state = command.substring(i + 1);
+            String storedUuid = loadUuidFromPreferences();
+
+            Serial.printf("🧾 UUID check → received: %s | stored: %s\n", incomingUuid.c_str(), storedUuid.c_str());
+
+            if (incomingUuid == storedUuid) {
+              digitalWrite(RELAY_PIN, state == "1" ? HIGH : LOW);
+              Serial.println("✅ Relay toggled via Hub (UUID match)");
+            } else {
+              Serial.println("❌ UUID mismatch – ignoring command");
+            }
+          } else {
+            Serial.println("❌ Invalid COMMAND format from Hub");
+          }
+        }
+      }
+      break;
   }
 }
-}
-
 void connectToHubAP() {
   Serial.printf("🔁 Connecting to Hub AP: %s\n", hubSsid.c_str());
+  
+  // Clear any existing WiFi connections first
+  WiFi.disconnect();
+  delay(100);
+  
+  // Make sure we're in station mode
+  WiFi.mode(WIFI_STA);
+  delay(100);
+  
+  // Start the connection attempt with specific credentials
   WiFi.begin(hubSsid.c_str(), hubPassword.c_str());
 
   int tries = 0;
   while (WiFi.status() != WL_CONNECTED && tries < 20) {
-    digitalWrite(LED_PIN, LOW);
-    delay(250);
-    digitalWrite(LED_PIN, HIGH);
+    digitalWrite(LED_PIN, tries % 2); // Blink LED during connection attempts
     delay(250);
     Serial.print(".");
     tries++;
@@ -207,15 +233,27 @@ void connectToHubAP() {
 
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\n✅ Connected to Hub AP");
+    Serial.printf("📍 IP address: %s\n", WiFi.localIP().toString().c_str());
     isInHubMode = true;
 
-    hubSocket.begin("192.168.4.1", 81, "/");  
+    // Initialize WebSocket connection to hub
+    // The default WebSocketsClient port for the hub should be 81
+    hubSocket.begin("192.168.4.1", 81, "/");
     hubSocket.onEvent(onHubWsEvent);
+    hubSocket.setReconnectInterval(5000); // Reconnect every 5s if connection fails
+    
+    Serial.println("🔌 WebSocket connection to hub initiated");
   } else {
     Serial.println("\n❌ Failed to connect to Hub AP.");
+    // Clear stored hub creds so next reboot tries backend
+    preferences.begin("hub", false);
+    preferences.clear();
+    preferences.end();
+    Serial.println("🗑️ Cleared hub credentials due to connection failure");
+    delay(1000);
+    ESP.restart();
   }
 }
-
 // ===== BACKEND MODE =====
 void handleBackendEvents() {
   backendSocket.on("connect", [](const char* payload, size_t length) {
@@ -244,27 +282,46 @@ void handleBackendEvents() {
     Serial.println("❌ Failed to parse assignUuid JSON");
   }
 });
-
-
 backendSocket.on("deviceCommand", [](const char *payload, size_t length) {
   String raw = String(payload).substring(0, length);
   raw.trim();
 
   Serial.printf("📥 Received deviceCommand (raw): %s\n", raw.c_str());
 
-  // ✅ Step 1: Unwrap outer quotes if present
+  // ✅ Step 1: Handle non-JSON ASSIGN string
+  if (raw.startsWith("ASSIGN:")) {
+    Serial.println("📦 Detected ASSIGN command");
+
+    String creds = raw.substring(7); // remove "ASSIGN:"
+    int comma = creds.indexOf(',');
+
+    if (comma != -1) {
+      String ssid = creds.substring(0, comma);
+      String password = creds.substring(comma + 1);
+      ssid.trim(); password.trim();
+
+      Serial.printf("🔐 Parsed Hub SSID: %s | Password: %s\n", ssid.c_str(), password.c_str());
+
+      saveHubCreds(ssid, password);
+      Serial.printf("💾 Saved SSID = %s | Saved Password = %s\n", ssid.c_str(), password.c_str());
+      delay(500);
+      ESP.restart();  // reboot to connect to hub
+    } else {
+      Serial.println("❌ Invalid ASSIGN format (missing comma)");
+    }
+
+    return; // ✅ Important: exit early, don't try to parse as JSON
+  }
+
+  // ✅ Step 2: If not ASSIGN, treat as JSON
   if (raw.startsWith("\"") && raw.endsWith("\"")) {
-  raw = raw.substring(1, raw.length() - 1);  // strip outer quotes
-
-  // Unescape all \ sequences
-  raw.replace("\\\"", "\"");
-  raw.replace("\\\\", "\\");
-}
-
+    raw = raw.substring(1, raw.length() - 1);  // strip outer quotes
+    raw.replace("\\\"", "\"");
+    raw.replace("\\\\", "\\");
+  }
 
   Serial.printf("✅ Cleaned JSON string: %s\n", raw.c_str());
 
-  // ✅ Step 2: Parse the cleaned JSON
   DynamicJsonDocument doc(128);
   DeserializationError err = deserializeJson(doc, raw);
 
@@ -274,25 +331,24 @@ backendSocket.on("deviceCommand", [](const char *payload, size_t length) {
     return;
   }
 
-  // ✅ Step 3: Extract and compare UUID
   String cmdUuid = doc["uuid"];
-  String cmd = doc["command"];
+  String command = doc["command"];
   String storedUuid = loadUuidFromPreferences();
 
   Serial.println("🧾 Stored UUID: " + storedUuid);
   Serial.println("🔑 Received UUID: " + cmdUuid);
 
   if (cmdUuid == storedUuid) {
-    if (cmd == "1") {
+    if (command == "1") {
       digitalWrite(RELAY_PIN, HIGH);
       Serial.println("⚡ Relay ON ✅ UUID match");
       backendSocket.emit("message", "\"TOGGLED:1\"");
-    } else if (cmd == "0") {
+    } else if (command == "0") {
       digitalWrite(RELAY_PIN, LOW);
       Serial.println("⚡ Relay OFF ✅ UUID match");
       backendSocket.emit("message", "\"TOGGLED:0\"");
     } else {
-      Serial.printf("❓ Unknown command: %s\n", cmd.c_str());
+      Serial.printf("❓ Unknown command: %s\n", command.c_str());
     }
   } else {
     Serial.println("🚫 UUID mismatch – command rejected");
@@ -303,7 +359,6 @@ backendSocket.on("deviceCommand", [](const char *payload, size_t length) {
     Serial.println("❌ Disconnected from Backend WS");
   });
 }
-
 void setup() {
 
   String loadedUuid = loadUuidFromPreferences();
@@ -405,7 +460,8 @@ void loop() {
     static unsigned long last = 0;
     if (millis() - last > 10000) {
       last = millis();
-      String msg = "HEARTBEAT:" + espId;
+      String uuid = loadUuidFromPreferences();
+      String msg = "HEARTBEAT:" + espId + ":" + uuid;
       hubSocket.sendTXT(msg);
       Serial.println("❤️ Sent heartbeat to Hub: " + msg);
     }

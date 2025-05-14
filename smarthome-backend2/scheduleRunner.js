@@ -5,7 +5,7 @@ import { toggleDevice } from './utils/toggleDevice.js';
 
 cron.schedule('* * * * *', async () => {
   const now = new Date();
-  console.log(`🔄 [SCHEDULE-RUNNER] Running at ${now.toISOString()}`);
+  //console.log(`🔄 [SCHEDULE-RUNNER] Running at ${now.toISOString()}`);
 
   try {
     const schedules = await Schedule.findAll({
@@ -20,7 +20,7 @@ cron.schedule('* * * * *', async () => {
       include: [{ model: UserHomeDevice }],
     });
 
-    console.log(`📦 Found ${schedules.length} due schedule(s)`);
+    //console.log(`📦 Found ${schedules.length} due schedule(s)`);
 
     for (const schedule of schedules) {
       const userHomeDevice = schedule.UserHomeDevice;

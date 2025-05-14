@@ -11,4 +11,9 @@ export default (sequelize) =>
     name: { type: DataTypes.STRING, allowNull: false },
     ssid: { type: DataTypes.STRING },
     password: { type: DataTypes.STRING },
+    isOnline: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
+  lastSeen: DataTypes.DATE,
   });

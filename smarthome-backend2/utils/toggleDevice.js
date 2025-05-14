@@ -1,3 +1,4 @@
+// toggleDevice.js
 import { deviceSockets, hubSockets } from '../sockets/deviceSocket.js';
 import { Device } from '../models/index.js';
 
@@ -8,23 +9,29 @@ export const toggleDevice = async (deviceId, state) => {
     const device = await Device.findByPk(deviceId);
     if (!device) return false;
 
-    const payload = {
-      uuid: device.id,           // ✅ Send UUID for validation
-      command: state.toString()  // Always send "0" or "1" as string
-    };
+    const command = state.toString();
 
     if (device.assignedHubId) {
       const hubSocket = hubSockets.get(device.assignedHubId);
       if (!hubSocket) return false;
 
-      const cmd = `COMMAND:${device.espId}:${payload.command}`;
-      hubSocket.send(cmd); // hub doesn't need UUID check, sends raw command
+      const cmd = `COMMAND:${device.id}:${command}`;
+      hubSocket.send(cmd);
+      console.log(`📡 Sent COMMAND to hub (${device.assignedHubId}) → ${cmd}`);
     } else {
       const deviceSocket = deviceSockets.get(device.espId);
       if (!deviceSocket) return false;
 
-      deviceSocket.emit("deviceCommand", (payload));
+      deviceSocket.emit("deviceCommand", {
+        uuid: device.id,
+        command
+      });
+      console.log(`📡 Sent command directly to device ${device.espId}`);
     }
+
+    // Update isOn in DB
+    device.isOn = state;
+    await device.save();
 
     return true;
   } catch (err) {

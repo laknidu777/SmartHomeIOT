@@ -1,5 +1,5 @@
-import { UserHome, UserHomeRoom, UserHomeDevice, Room, Device, NoUserDevice } from '../models/index.js';
-import { deviceSockets, hubSockets } from '../sockets/deviceSocket.js';
+import { UserHome, UserHomeRoom, UserHomeDevice, Room, Device, NoUserDevice,Hub } from '../models/index.js';
+import { deviceSockets, hubSockets ,globalIo } from '../sockets/deviceSocket.js';
 //import { deviceSockets } from '../sockets/deviceSocket.js';
 
 export const claimDevice = async (req, res) => {
@@ -157,22 +157,62 @@ export const deleteDevice = async (req, res) => {
 export const assignDeviceToHub = async (req, res) => {
   try {
     const { id } = req.params;
-    const { hubId, ssid, password } = req.body;
+    const { hubId } = req.body;
 
     const device = await Device.findByPk(id);
-    if (!device) return res.status(404).json({ message: 'Device not found' });
+    const hub = await Hub.findOne({ where: { espId: hubId } });
 
+    if (!device || !hub) {
+      return res.status(404).json({ message: 'Device or Hub not found' });
+    }
+
+    // Update DB with hub link
     device.assignedHubId = hubId;
-    device.hubSsid = ssid;
-    device.hubPassword = password;
-
+    device.hubSsid = hub.ssid;
+    device.hubPassword = hub.password;
     await device.save();
+
+    // 🔁 Send ASSIGN directly to the device
+    const deviceSocket = deviceSockets.get(device.espId);
+    if (deviceSocket) {
+      const command = `ASSIGN:${hub.ssid},${hub.password}`;
+      deviceSocket.emit("deviceCommand", command);
+      console.log(`📡 Sent ASSIGN to device ${device.espId}: ${command}`);
+    } else {
+      console.warn(`⚠️ Device ${device.espId} not connected to backend`);
+    }
 
     res.status(200).json({ message: 'Device assigned to hub', device });
   } catch (err) {
+    console.error('💥 assignDeviceToHub Error:', err);
     res.status(500).json({ message: 'Failed to assign device', error: err.message });
   }
 };
+
+export const unassignDeviceFromHub = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const device = await Device.findByPk(id);
+    if (!device) return res.status(404).json({ message: 'Device not found' });
+
+    const hubSocket = hubSockets.get(device.assignedHubId);
+    if (hubSocket) {
+      const resetCmd = `RESET:${device.espId}`;
+      hubSocket.send(resetCmd);
+      console.log(`🔄 Sent RESET command to Hub for device ${device.espId}`);
+    }
+
+    device.assignedHubId = null;
+    device.hubSsid = null;
+    device.hubPassword = null;
+    await device.save();
+
+    res.status(200).json({ message: 'Device unassigned from hub', device });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to unassign device', error: err.message });
+  }
+};
+
 // export const setDeviceState = async (req, res) => {
 //   try {
 //     const { id } = req.params;           // ✅ device ID from URL
@@ -231,6 +271,41 @@ export const setDeviceState = async (req, res) => {
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
+export const notifyDeviceAssigned = async (req, res) => {
+  try {
+    const { uuid } = req.params;
 
+    const device = await Device.findOne({ where: { uuid: uuid } });
+    if (!device) {
+      return res.status(404).json({ message: 'Device not found' });
+    }
+
+    device.isOnline = true;
+    await device.save();
+
+    console.log(`✅ Assignment confirmed from Hub for device ${device.espId}`);
+    res.status(200).json({ message: 'Device assignment confirmed' });
+  } catch (err) {
+    console.error('❌ notifyDeviceAssigned error:', err.message);
+    res.status(500).json({ message: 'Error confirming assignment', error: err.message });
+  }
+};
+export const markDeviceOffline = async (req, res) => {
+  try {
+    const { uuid } = req.params;
+
+    const device = await Device.findOne({ where: { id: uuid } });
+    if (!device) return res.status(404).json({ message: 'Device not found' });
+
+    device.isOnline = false;
+    await device.save();
+
+    globalIo.emit('deviceStatusChange', { espId: device.espId, isOnline: false });
+    res.status(200).json({ message: 'Device marked offline' });
+  } catch (err) {
+    console.error('❌ markDeviceOffline error:', err);
+    res.status(500).json({ message: 'Failed to mark device offline', error: err.message });
+  }
+};
 
 

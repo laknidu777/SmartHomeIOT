@@ -11,7 +11,7 @@ export default (sequelize) =>
     name: { type: DataTypes.STRING, allowNull: false },
     isOn: { type: DataTypes.BOOLEAN, defaultValue: false },         // for toggle state
     isOnline: { type: DataTypes.BOOLEAN, defaultValue: false },     // for status updates
-    assignedHubId: { type: DataTypes.UUID },                        // to route through hub
+    assignedHubId: { type: DataTypes.STRING },                        // to route through hub
     hubSsid: { type: DataTypes.STRING },                            // for provisioning
     hubPassword: { type: DataTypes.STRING },                        // for provisioning
     RoomId: { type: DataTypes.INTEGER  },                               // already used in create/update
