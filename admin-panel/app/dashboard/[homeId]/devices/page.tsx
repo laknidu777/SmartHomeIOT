@@ -90,7 +90,7 @@ export default function DevicesPage() {
       await axios.patch(`/devices/${editingDevice.id}`, payload);
       message.success('Device updated');
     } else {
-      await axios.post('/devices/create', { ...values, houseId: homeId });
+      await axios.post('/devices/claim', { ...values, houseId: homeId });
       message.success('Device added');
     }
 

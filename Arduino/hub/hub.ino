@@ -37,20 +37,90 @@ struct Device {
     : id(_id), uuid(_uuid), lastHeartbeat(_hb), reportedOffline(_offline), clientId(_cid) {}
 };
 
+void clearStoredDevices();            // Declare before use
+void saveDeviceToMemory(String espId); // Declare before use
 
 std::vector<Device> connectedDevices;
 
 String htmlForm = R"rawliteral(
 <!DOCTYPE html>
-<html><head><title>Hub Wi-Fi Setup</title>
-<style>body{font-family:Arial;text-align:center;padding:50px;}input{padding:10px;margin:10px;width:200px;}button{padding:10px 20px;}</style></head>
-<body><h2>Configure Hub Wi-Fi</h2>
-<form action="/save" method="POST">
-<input type="text" name="ssid" placeholder="WiFi SSID" required><br>
-<input type="password" name="password" placeholder="Password" required><br>
-<button type="submit">Save and Reboot</button>
-</form></body></html>
+<html>
+<head>
+  <title>Hub Wi-Fi Setup</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+      background-color: #f0f2f5;
+    }
+
+    .header {
+      background-color: #001529;
+      color: white;
+      padding: 16px 24px;
+      font-size: 1.5rem;
+      font-weight: bold;
+      letter-spacing: 0.5px;
+      text-align: center;
+    }
+
+    .container {
+      margin-top: 60px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .card {
+      background-color: #ffffff;
+      padding: 32px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      width: 90%;
+      max-width: 400px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      margin: 12px 0;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 16px;
+    }
+
+    button {
+      background-color: #1890ff;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    button:hover {
+      background-color: #1477d3;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">AUTOHOME.GLOBAL</div>
+  <div class="container">
+    <div class="card">
+      <h2>Configure Hub Wi-Fi</h2>
+      <form action="/save" method="POST">
+        <input type="text" name="ssid" placeholder="WiFi SSID" required>
+        <input type="password" name="password" placeholder="Password" required>
+        <button type="submit">Save and Reboot</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>
 )rawliteral";
+
 
 void notifyBackendOffline(String uuid) {
   if (WiFi.status() == WL_CONNECTED) {
@@ -116,21 +186,48 @@ void handleSave() {
   delay(1500);
   ESP.restart();
 }
+void handleLoginPage() {
+  String html = "<!DOCTYPE html><html><head><title>Hub Login</title>";
+  html += "<style>body{font-family:sans-serif;text-align:center;padding:40px;background:#f0f2f5;}input{padding:10px;width:200px;margin:10px;}button{padding:10px 20px;background:#1890ff;color:white;border:none;border-radius:4px;}</style>";
+  html += "</head><body><h2>Hub Login</h2>";
+  html += "<form method='POST' action='/auth'>";
+  html += "<input type='text' name='ssid' placeholder='SSID'><br>";
+  html += "<input type='password' name='password' placeholder='Password'><br>";
+  html += "<button type='submit'>Login</button></form></body></html>";
+  server.send(200, "text/html", html);
+}
+bool isLoggedIn = false;
+void handleAuth() {
+  String username = server.arg("ssid");
+  String password = server.arg("password");
+
+  if (username == "admin" && password == "12345678") {
+    isLoggedIn = true;
+    server.sendHeader("Location", "/devices", true);
+    server.send(302, "text/plain", "Redirecting...");
+  } else {
+    isLoggedIn = false;
+    server.send(401, "text/plain", "Invalid credentials");
+  }
+}
+
 void handleDevicePage() {
+    if (!isLoggedIn) {
+    server.sendHeader("Location", "/login", true);
+    server.send(302, "text/plain", "Redirecting to login...");
+    return;
+  }
+
   String html = "<!DOCTYPE html><html><head><title>Hub Device Control</title>";
   html += "<style>body{font-family:sans-serif;padding:30px;}table{border-collapse:collapse;width:100%;}th,td{padding:10px;border:1px solid #ccc;text-align:left;}button{padding:5px 10px;}</style>";
   html += "</head><body><h2>Connected Devices</h2>";
   html += "<table><tr><th>espId</th><th>UUID</th><th>Actions</th></tr>";
 
   for (const Device& dev : connectedDevices) {
-    html += "<tr>";
-    html += "<td>" + dev.id + "</td>";
-    html += "<td>" + dev.uuid + "</td>";
-    html += "<td>";
+    html += "<tr><td>" + dev.id + "</td><td>" + dev.uuid + "</td><td>";
     html += "<a href=\"/toggle?uuid=" + dev.uuid + "&state=1\"><button>ON</button></a> ";
     html += "<a href=\"/toggle?uuid=" + dev.uuid + "&state=0\"><button>OFF</button></a>";
-    html += "</td>";
-    html += "</tr>";
+    html += "</td></tr>";
   }
 
   html += "</table></body></html>";
@@ -150,14 +247,16 @@ void handleToggle() {
       String cmd = "COMMAND:" + uuid + ":" + state;
       webSocket.sendTXT(dev.clientId, cmd);
       Serial.printf("⚡ Toggled %s → %s\n", uuid.c_str(), state.c_str());
-      server.send(200, "text/plain", "Toggled device " + uuid + " to state " + state);
+     // server.send(200, "text/plain", "Toggled device " + uuid + " to state " + state);
+      server.sendHeader("Location", "/devices", true);
+      server.send(302, "text/plain", "Redirecting...");
+
       return;
     }
   }
 
   server.send(404, "text/plain", "Device not found");
 }
-
 void setupWiFi() {
   preferences.begin("wifi", true);
   String ssid = preferences.getString("ssid", "");
@@ -195,6 +294,8 @@ void setupWiFi() {
   // ✅ Register routes always
   server.on("/", handleRoot);
   server.on("/save", handleSave);
+  server.on("/login", handleLoginPage);
+  server.on("/auth", HTTP_POST, handleAuth);
   server.on("/devices", handleDevicePage);
   server.on("/toggle", handleToggle);
   server.begin();
