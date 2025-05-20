@@ -13,7 +13,16 @@ export default (sequelize) =>
     isOnline: { type: DataTypes.BOOLEAN, defaultValue: false },     // for status updates
     assignedHubId: { type: DataTypes.STRING },                        // to route through hub
     hubSsid: { type: DataTypes.STRING },                            // for provisioning
-    hubPassword: { type: DataTypes.STRING },                        // for provisioning
+    hubPassword: { type: DataTypes.STRING },   
+    type: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'light', // fallback if type is missing
+    },
+    pin: {
+      type: DataTypes.STRING, // store hashed PIN
+      allowNull: true,
+    },                    // for provisioning
     RoomId: { type: DataTypes.INTEGER  },                               // already used in create/update
     homeId: { type: DataTypes.UUID },                               // for access control
   });

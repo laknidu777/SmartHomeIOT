@@ -4,11 +4,13 @@ import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { useState } from 'react';
 import { Typography, Form, Input, Button, message, Card, Select } from 'antd';
 import axios from '@/lib/api';
+import { useRoleGuard } from '../../../hooks/useRoleGuard';
 
 const { Title } = Typography;
 const { Option } = Select;
 
 export default function VerifyInviteStepTwo() {
+  useRoleGuard(['SuperAdmin']);
   const router = useRouter();
   const { homeId } = useParams();
   const searchParams = useSearchParams();

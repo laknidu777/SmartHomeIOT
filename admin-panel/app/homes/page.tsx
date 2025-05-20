@@ -14,6 +14,8 @@ export default function HomesPage() {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const { setHomeId, setHomeName } = useHome(); 
+  const [form] = Form.useForm();
+
 
   const fetchHomes = async () => {
     try {
@@ -30,24 +32,52 @@ export default function HomesPage() {
     fetchHomes();
   }, []);
 
-  const handleSelectHome = (homeId: string) => {
-    const selected = homes.find((h) => h.id === homeId);
-    setHomeId(homeId);
-    setHomeName(selected?.name);
-    localStorage.setItem('selectedHomeId', homeId);
-    router.push('/dashboard');
-  };
+  const handleSelectHome = async (homeId: string) => {
+  const selected = homes.find((h) => h.id === homeId);
+  setHomeId(homeId);
+  setHomeName(selected?.name);
+  localStorage.setItem('selectedHomeId', homeId);
 
-  const handleAddHome = async (values: { name: string; address?: string }) => {
-    try {
-      await axios.post('/houses/create', values);
-      message.success('Home added');
-      setModalVisible(false);
-      fetchHomes();
-    } catch (err) {
-      message.error('Failed to add home');
+  try {
+    const token = localStorage.getItem('token');
+    const res = await axios.get(`/houses/${homeId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const role = res.data.role;
+    localStorage.setItem('userRole', role); // Save role for later access
+  } catch (err) {
+    message.error('Failed to fetch user role');
+  }
+
+  router.push('/dashboard');
+};
+
+
+ const handleAddHome = async (values: { name: string; address?: string }) => {
+  try {
+    const res = await axios.post('/houses/create', values);
+    message.success('Home added');
+
+    const newHomeId = res.data?.house?.id;
+    const newHomeName = res.data?.house?.name;
+
+    setModalVisible(false);
+    form.resetFields();
+    fetchHomes();
+
+    // Auto-select new home
+    if (newHomeId) {
+      setHomeId(newHomeId);
+      setHomeName(newHomeName);
+      localStorage.setItem('selectedHomeId', newHomeId);
+      router.push('/dashboard');
     }
-  };
+  } catch (err) {
+    message.error('Failed to add home');
+  }
+};
+
 
   return (
     <div style={{
@@ -66,7 +96,7 @@ export default function HomesPage() {
             onClick={() => setModalVisible(true)}
             size="large"
             style={{
-              backgroundColor: '#2B6873',
+              backgroundColor: '#005575',
               borderColor: '#2B6873',
               transition: '0.3s',
             }}
@@ -124,11 +154,15 @@ export default function HomesPage() {
         <Modal
           title={<span style={{ color: '#2B6873' }}>Add New Home</span>}
           open={modalVisible}
-          onCancel={() => setModalVisible(false)}
+          onCancel={() => {
+            setModalVisible(false);
+            form.resetFields(); // 🧼 clear inputs
+          }}
           footer={null}
           centered
         >
-          <Form layout="vertical" onFinish={handleAddHome}>
+
+          <Form form={form} layout="vertical" onFinish={handleAddHome}>
             <Form.Item
               label="Home Name"
               name="name"

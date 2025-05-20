@@ -127,3 +127,4 @@ export const assignDevicesToUser = async (req, res) => {
       res.status(500).json({ message: 'Failed to fetch devices', error: err.message });
     }
   };
+  

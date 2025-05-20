@@ -1,9 +1,10 @@
 import express from 'express';
 import { createDevice, getDevicesForRoom,updateDevice,deleteDevice,assignDeviceToHub,setDeviceState,
-    claimDevice,unassignDeviceFromHub,notifyDeviceAssigned,markDeviceOffline
+    claimDevice,unassignDeviceFromHub,notifyDeviceAssigned,markDeviceOffline,getHubDeviceAssignmentOverview
  } from '../controllers/deviceController.js';
 import { authenticate } from '../middlewares/authMiddleware.js';
 import { authorizeDeviceAccess } from '../middlewares/authorizeDeviceAccess.js';
+import { checkDeviceType } from '../middlewares/checkDeviceType.js';
 
 const router = express.Router();
 
@@ -18,11 +19,16 @@ router.delete('/:id', authenticate, deleteDevice);
 router.patch('/:id/assign-hub', authenticate, assignDeviceToHub);
 router.patch('/:id/unassign-hub', authenticate, unassignDeviceFromHub);
 
+//router.get('/hub/:hubId', authenticate, getDevicesForHub);
+router.get('/hub/:hubId/assignment-overview', authenticate, getHubDeviceAssignmentOverview);
+
+
+
 router.post('/devices/:uuid/assigned', notifyDeviceAssigned);
 router.post('/:uuid/offline', markDeviceOffline);
 
 
 
 //toggle state
-router.patch('/:id/state', authenticate, authorizeDeviceAccess, setDeviceState);
+router.patch('/:id/state', authenticate, authorizeDeviceAccess, checkDeviceType, setDeviceState);
 export default router;

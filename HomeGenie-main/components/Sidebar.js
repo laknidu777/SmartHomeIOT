@@ -116,7 +116,7 @@ export default function Sidebar({ visible, onClose }) {
             </MenuSection>
 
             <MenuSection title="Automation">
-              <MenuItem title="Schedules" icon="alarm-outline" />
+              <MenuItem title="Schedules" icon="alarm-outline" onPress={() => navigation.navigate("ScheduleScreen")} />
               <MenuItem title="Scenes" icon="images-outline" />
               <MenuItem title="Routines" icon="sync-outline" />
             </MenuSection>

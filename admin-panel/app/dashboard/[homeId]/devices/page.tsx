@@ -23,11 +23,14 @@ import {
 } from '@ant-design/icons';
 import { useParams } from 'next/navigation';
 import axios from '@/lib/api';
+import { useRoleGuard } from '../../../hooks/useRoleGuard';
+
 
 const { Title } = Typography;
 const { Option } = Select;
 
 export default function DevicesPage() {
+  useRoleGuard(['SuperAdmin']);
   const { homeId } = useParams();
   const [rooms, setRooms] = useState([]);
   const [devices, setDevices] = useState([]);
@@ -35,6 +38,7 @@ export default function DevicesPage() {
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editingDevice, setEditingDevice] = useState(null);
+  const [deviceType, setDeviceType] = useState(null);
   const [form] = Form.useForm();
 
   const fetchRoomsAndDevices = async () => {
@@ -67,28 +71,39 @@ export default function DevicesPage() {
   }, [homeId]);
 
   const openModal = (device = null) => {
-    setEditingDevice(device);
-    form.resetFields();
-    setModalVisible(true);
-  };
+  setEditingDevice(device);
+  setDeviceType(device?.type || null); // ✅ Track type
+  form.resetFields();
+  setModalVisible(true);
+};
+
 
   const handleSubmit = async (values) => {
-    try {
-      if (editingDevice) {
-        await axios.patch(`/devices/${editingDevice.id}`, values);
-        message.success('Device updated');
-      } else {
-        await axios.post('/devices/create', { ...values, houseId: homeId });
-        message.success('Device added');
+  try {
+    if (editingDevice) {
+      const payload = { ...values };
+
+      if (deviceType === 'doorlock' && values.pin) {
+        payload.pin = values.pin;
       }
-      setModalVisible(false);
-      form.resetFields();
-      setEditingDevice(null);
-      fetchRoomsAndDevices();
-    } catch {
-      message.error('Failed to save device');
+
+      await axios.patch(`/devices/${editingDevice.id}`, payload);
+      message.success('Device updated');
+    } else {
+      await axios.post('/devices/create', { ...values, houseId: homeId });
+      message.success('Device added');
     }
-  };
+
+    setModalVisible(false);
+    form.resetFields();
+    setEditingDevice(null);
+    setDeviceType(null);
+    fetchRoomsAndDevices();
+  } catch {
+    message.error('Failed to save device');
+  }
+};
+
 
   const handleDelete = async (id) => {
     try {
@@ -204,6 +219,15 @@ export default function DevicesPage() {
               ))}
             </Select>
           </Form.Item>
+          {deviceType === 'doorlock' && (
+            <Form.Item
+              name="pin"
+              label="PIN Number"
+              rules={[{ required: true, message: 'Please enter a PIN' }]}
+            >
+              <Input.Password maxLength={6} />
+            </Form.Item>
+          )}
           <Button type="primary" htmlType="submit" block style={{ backgroundColor: '#2B6873', borderColor: '#2B6873' }}>
             {editingDevice ? 'Update Device' : 'Create Device'}
           </Button>

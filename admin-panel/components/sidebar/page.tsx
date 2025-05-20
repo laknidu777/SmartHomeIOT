@@ -24,11 +24,14 @@ export default function AppSidebar({
 }) {
   const pathname = usePathname();
   const [homeId, setHomeId] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedId = localStorage.getItem('selectedHomeId');
-    setHomeId(storedId);
+    setHomeId(localStorage.getItem('selectedHomeId'));
+    setUserRole(localStorage.getItem('userRole'));
   }, []);
+
+  const isSuperAdmin = userRole === 'SuperAdmin';
 
   return (
     <Drawer
@@ -47,9 +50,7 @@ export default function AppSidebar({
         mode="inline"
         selectedKeys={[pathname]}
         onClick={onClose}
-        style={{
-          borderRight: 0,
-        }}
+        style={{ borderRight: 0 }}
         theme="light"
         items={[
           {
@@ -64,25 +65,34 @@ export default function AppSidebar({
           },
           ...(homeId
             ? [
-                {
-                  key: '/users',
-                  icon: <UserOutlined style={{ color: '#2B6873' }} />,
-                  label: <Link href={`/dashboard/${homeId}/users`}>Users</Link>,
-                },
-                {
-                  key: '/rooms',
-                  icon: <AppstoreOutlined style={{ color: '#2B6873' }} />,
-                  label: <Link href={`/dashboard/${homeId}/rooms`}>Rooms</Link>,
-                },
+                ...(isSuperAdmin
+                  ? [
+                      {
+                        key: '/users',
+                        icon: <UserOutlined style={{ color: '#2B6873' }} />,
+                        label: <Link href={`/dashboard/${homeId}/users`}>Users</Link>,
+                      },
+                      {
+                        key: '/rooms',
+                        icon: <AppstoreOutlined style={{ color: '#2B6873' }} />,
+                        label: <Link href={`/dashboard/${homeId}/rooms`}>Rooms</Link>,
+                      },
+                      {
+                        key: '/devices',
+                        icon: <UsbOutlined style={{ color: '#2B6873' }} />,
+                        label: <Link href={`/dashboard/${homeId}/devices`}>Devices</Link>,
+                      },
+                      {
+                        key: '/User Profile',
+                        icon: <ClockCircleOutlined style={{ color: '#2B6873' }} />,
+                        label: <Link href={`/dashboard/${homeId}/profilepage`}>User Profile</Link>,
+                      },
+                    ]
+                  : []),
                 {
                   key: '/hubs',
                   icon: <UsbOutlined style={{ color: '#2B6873' }} />,
                   label: <Link href={`/dashboard/${homeId}/hub`}>Hubs</Link>,
-                },
-                {
-                  key: '/devices',
-                  icon: <UsbOutlined style={{ color: '#2B6873' }} />,
-                  label: <Link href={`/dashboard/${homeId}/devices`}>Devices</Link>,
                 },
                 {
                   key: '/schedules',

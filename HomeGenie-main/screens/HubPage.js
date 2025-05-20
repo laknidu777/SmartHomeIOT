@@ -53,65 +53,49 @@ export default function HubPage() {
     load();
   }, []);
 
-  const fetchAll = async (homeId) => {
-    try {
-      setLoading(true);
-      const api = await getAuthAxios();
+  const fetchAll = async () => {
+  try {
+    setLoading(true);
+    const storedHomeId = await AsyncStorage.getItem("homeId");
+    setHomeId(storedHomeId);
 
-      const [hubRes, unassignedRes] = await Promise.all([
-        api.get(`/hubs/by-home/${homeId}`),
-        api.get(`/hubs/unassigned/${homeId}`)
-      ]);
+    const api = await getAuthAxios();
+    const res = await api.get(`/hubs/${storedHomeId}`);
+    const hubList = res.data || [];
 
-      setHubs(hubRes.data);
-      setUnassignedDevices(unassignedRes.data);
+    setHubs(hubList);
 
-      if (hubRes.data.length > 0) {
-        setSelectedHub(hubRes.data[0]);
-        fetchDevicesByHub(hubRes.data[0].hubId);
-      }
-    } catch (err) {
-      console.error(err);
-      Toast.show({ type: "error", text1: "Failed to load hub data" });
-    } finally {
-      setLoading(false);
+    if (hubList.length > 0) {
+      const firstHub = hubList[0];
+      setSelectedHub(firstHub);
+      fetchDevicesByHub(firstHub.espId);
     }
-  };
+  } catch (err) {
+    console.error("❌ Failed to fetch hubs:", err);
+    Toast.show({ type: "error", text1: "Failed to load hubs" });
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const fetchDevicesByHub = async (hubId) => {
-    try {
-      const api = await getAuthAxios();
-      const res = await api.get(`/hubs/${hubId}/devices`);
-      setAssignedDevices(res.data);
-    } catch (err) {
-      console.error(err);
-      Toast.show({ type: "error", text1: "Failed to load assigned devices" });
-    }
-  };
+
+  const fetchDevicesByHub = async (espId) => {
+  try {
+    const api = await getAuthAxios();
+    const res = await api.get(`/devices/hub/${espId}/assignment-overview`);
+
+    setAssignedDevices(res.data.assignedDevices || []);
+    setUnassignedDevices(res.data.unassignedDevices || []);
+  } catch (err) {
+    console.error("❌ Failed to fetch hub devices:", err);
+    Toast.show({ type: "error", text1: "Failed to fetch hub devices" });
+  }
+};
+
+
 
   const refresh = () => {
     if (homeId) fetchAll(homeId);
-  };
-
-  const assignDevice = async (espId) => {
-    if (!selectedHub) {
-      Toast.show({ type: "error", text1: "Please select a hub first" });
-      return;
-    }
-  
-    try {
-      const api = await getAuthAxios();
-      await api.patch(`/devices/${espId}/assign-hub`, {
-        hubId: selectedHub.hubId,
-        hubSsid: selectedHub.hubSsid,
-        hubPassword: selectedHub.hubPassword
-      });
-      Toast.show({ type: "success", text1: "Device assigned!" });
-      refresh();
-    } catch (err) {
-      console.error(err);
-      Toast.show({ type: "error", text1: "Failed to assign device" });
-    }
   };
   const unassignDevice = async (espId) => {
     try {
@@ -124,23 +108,39 @@ export default function HubPage() {
       Toast.show({ type: "error", text1: "Failed to unassign device" });
     }
   };
-  const submitNewHub = async () => {
-    try {
-      const api = await getAuthAxios();
-      await api.post(`/hubs/register`, {
-        hubId: hubIdInput,
-        name: hubName,
-        ssid: hubSsid,
-        password: hubPassword,
-        homeId
-      });
-      Toast.show({ type: "success", text1: "Hub created!" });
-      setModalVisible(false);
-      refresh();
-    } catch (err) {
-      Toast.show({ type: "error", text1: "Failed to create hub" });
-    }
-  };
+const submitNewHub = async () => {
+  if (!hubIdInput.trim() || !hubName.trim() || !hubSsid.trim() || !hubPassword.trim()) {
+    Alert.alert("Missing Fields", "Please fill in all required fields.");
+    return;
+  }
+
+  try {
+    const api = await getAuthAxios();
+
+    const payload = {
+      espId: hubIdInput,             // ✅ backend expects this
+      name: hubName,
+      ssid: hubSsid,
+      password: hubPassword,
+      houseId: homeId                // ✅ not `homeId`
+    };
+
+    //console.log("📤 Submitting new hub:", payload);
+
+    await api.post(`/hubs/create`, payload);
+
+    Toast.show({ type: "success", text1: "Hub created!" });
+    setModalVisible(false);
+    setHubIdInput("");
+    setHubName("");
+    setHubSsid("");
+    setHubPassword("");
+    refresh();
+  } catch (err) {
+    console.error("❌ Failed to create hub:", err.response?.data || err.message);
+    Toast.show({ type: "error", text1: "Failed to create hub" });
+  }
+};
 
   const DeviceCard = ({ device, assigned }) => (
     <View style={styles.deviceCard}>
@@ -190,8 +190,6 @@ export default function HubPage() {
     ]);
   };
   
-  
-
   return (
     <View style={styles.container}>
       {loading ? <ActivityIndicator size="large" /> : (
@@ -209,7 +207,7 @@ export default function HubPage() {
                 ]}
                 onPress={() => {
                   setSelectedHub(hub);
-                  fetchDevicesByHub(hub.hubId);
+                  fetchDevicesByHub(hub.espId || hub.hubId)
                 }}
               >
                 <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -228,18 +226,18 @@ export default function HubPage() {
               <View style={styles.infoHeader}>
                 <Text style={styles.infoTitle}>Hub Info</Text>
                 <TouchableOpacity onPress={() => {
-                  setHubIdInput(selectedHub.hubId);
+                  setHubIdInput(selectedHub.id); // ✅ Use internal DB id, not espId
                   setHubName(selectedHub.name || "");
                   setHubSsid(selectedHub.hubSsid || "");
                   setHubPassword(selectedHub.hubPassword || "");
-                  setEditMode(true);
+                  setEditMode(false);
                   setModalVisible(true);
                 }}>
                   <Ionicons name="create-outline" size={22} color="#4a5568" />
                 </TouchableOpacity>
               </View>
               <Text style={styles.infoText}>Name: {selectedHub.name}</Text>
-              <Text style={styles.infoText}>Hub ID: {selectedHub.hubId}</Text>
+              <Text style={styles.infoText}>Hub ID: {selectedHub.espId || selectedHub.hubId}</Text>
               <Text style={styles.infoText}>SSID: {selectedHub.hubSsid}</Text>
             </View>
           )}

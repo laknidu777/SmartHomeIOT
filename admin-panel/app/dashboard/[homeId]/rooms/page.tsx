@@ -20,10 +20,12 @@ import {
 } from '@ant-design/icons';
 import { useParams } from 'next/navigation';
 import axios from '@/lib/api';
+import { useRoleGuard } from '../../../hooks/useRoleGuard';
 
 const { Title } = Typography;
 
 export default function RoomsPage() {
+  useRoleGuard(['SuperAdmin']);
   const { homeId } = useParams();
   const [rooms, setRooms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

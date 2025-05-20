@@ -15,6 +15,7 @@ import CategoryPage from "./screens/CategoryPage";
 import DevicePage from "./screens/DevicePage"
 import SupportPage from "./screens/SupportPage";
 import HubPage from "./screens/HubPage";
+import ScheduleScreen from "./screens/ScheduleScreen";
 const Stack = createStackNavigator();
 export default function App() {
   return (
@@ -59,6 +60,14 @@ export default function App() {
           children={({ navigation, route }) => (
             <AppLayout navigation={navigation}>
               <HubPage route={route} navigation={navigation} />
+            </AppLayout>
+          )}
+        />
+        <Stack.Screen
+          name="ScheduleScreen"
+          children={({ navigation, route }) => (
+            <AppLayout navigation={navigation}>
+              <ScheduleScreen route={route} navigation={navigation} />
             </AppLayout>
           )}
         />

@@ -8,7 +8,7 @@ export default function AppFooter() {
   return (
     <Footer style={{
       textAlign: 'center',
-      background: '#2B6873', 
+      background: '#005575', 
       color: 'white'
     }}>
       Smart Home ©{new Date().getFullYear()} Created by Laknidu

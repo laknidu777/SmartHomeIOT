@@ -61,7 +61,7 @@ export default function Login() {
     setIsLoading(true);
     try {
       console.log("🔐 Logging in with:", email);
-      const res = await api.post("/api/users/login", {
+      const res = await api.post("/api/auth/login", {
         email,
         password,
       });

@@ -1,9 +1,9 @@
-// /app/hubs/page.js
+// /app/hubs/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
 import {
-  Table, Button, Modal, Form, Input, Tabs, message, Tag, Popconfirm, Space, Typography, Select
+  Table, Button, Modal, Form, Input, Tabs, message, Tag, Popconfirm, Space, Typography
 } from 'antd';
 import {
   WifiOutlined,
@@ -13,19 +13,20 @@ import {
   UsbOutlined
 } from '@ant-design/icons';
 import axios from '@/lib/api';
+import { useRoleGuard } from '../../../hooks/useRoleGuard';
 
 const { Title } = Typography;
 const { TabPane } = Tabs;
 
 export default function HubsPage() {
+  useRoleGuard(['SuperAdmin']);
   const [hubs, setHubs] = useState([]);
-  const [assignedDevices, setAssignedDevices] = useState([]);
-  const [unassignedDevices, setUnassignedDevices] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [selectedHub, setSelectedHub] = useState(null);
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
+  const [hubDeviceMap, setHubDeviceMap] = useState({});
 
   const fetchAll = async () => {
     try {
@@ -35,16 +36,22 @@ export default function HubsPage() {
 
       const hubsRes = await axios.get(`/hubs/${homeId}`, { headers });
       setHubs(hubsRes.data);
-
-      const assignedRes = await axios.get(`/devices/assigned/${homeId}`, { headers });
-      setAssignedDevices(assignedRes.data);
-
-      const unassignedRes = await axios.get(`/devices/unassigned/${homeId}`, { headers });
-      setUnassignedDevices(unassignedRes.data);
     } catch (err) {
       message.error('Failed to load hub data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDevicesForHub = async (espId) => {
+    const token = localStorage.getItem('token');
+    const headers = { Authorization: `Bearer ${token}` };
+
+    try {
+      const res = await axios.get(`/devices/hub/${espId}/assignment-overview`, { headers });
+      setHubDeviceMap(prev => ({ ...prev, [espId]: res.data }));
+    } catch (err) {
+      message.error(`Failed to fetch devices for hub ${espId}`);
     }
   };
 
@@ -102,7 +109,7 @@ export default function HubsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       message.success('Device assigned');
-      fetchAll();
+      fetchDevicesForHub(hubId);
     } catch {
       message.error('Failed to assign device');
     }
@@ -153,12 +160,12 @@ export default function HubsPage() {
               ssid: record.ssid || '',
               password: record.password || '',
             });
-           form.setFieldsValue({
-            espId: record.espId || '',
-            name: record.name || '',
-            ssid: record.ssid || '',
-            password: record.password || '',
-          });
+            form.setFieldsValue({
+              espId: record.espId || '',
+              name: record.name || '',
+              ssid: record.ssid || '',
+              password: record.password || '',
+            });
             setEditMode(true);
             setModalVisible(true);
           }}>Edit</Button>
@@ -179,7 +186,7 @@ export default function HubsPage() {
       <Button type="primary" icon={<PlusOutlined />} onClick={() => {
         setModalVisible(true);
         setEditMode(false);
-        setSelectedHub(null); 
+        setSelectedHub(null);
         form.resetFields();
       }} style={{ marginBottom: 16, backgroundColor: '#2B6873', borderColor: '#2B6873' }}>
         Add Hub
@@ -192,53 +199,56 @@ export default function HubsPage() {
         pagination={false}
         style={{ marginBottom: 32, backgroundColor: 'white', borderRadius: 12 }}
         loading={loading}
-      />
+        expandable={{
+          expandedRowRender: (hub) => {
+            const data = hubDeviceMap[hub.espId] || { assignedDevices: [], unassignedDevices: [] };
 
-      <Tabs defaultActiveKey="assigned">
-        <TabPane tab="Assigned Devices" key="assigned">
-          <Table
-            rowKey="id"
-            dataSource={assignedDevices}
-            columns={[
-              { title: 'Device Name', dataIndex: 'name' },
-              { title: 'Hub ID', dataIndex: 'assignedHubId' },
-              {
-                title: 'Actions',
-                render: (_, record) => (
-                  <Button danger icon={<DeleteOutlined />} onClick={() => handleUnassign(record.id)}>
-                    Unassign
-                  </Button>
-                ),
-              },
-            ]}
-          />
-        </TabPane>
-        <TabPane tab="Unassigned Devices" key="unassigned">
-          <Table
-            rowKey="id"
-            dataSource={unassignedDevices}
-            columns={[
-              { title: 'Device Name', dataIndex: 'name' },
-              {
-                title: 'Assign To',
-                render: (_, record) => (
-                  <Select
-                    style={{ width: 200 }}
-                    placeholder="Select Hub"
-                    onChange={(value) => handleAssign(record.id, value)}
-                  >
-                    {hubs.map((hub) => (
-                      <Select.Option key={hub.espId} value={hub.espId}>
-                        <UsbOutlined style={{ marginRight: 6 }} />{hub.name} ({hub.ssid})
-                      </Select.Option>
-                    ))}
-                  </Select>
-                ),
-              },
-            ]}
-          />
-        </TabPane>
-      </Tabs>
+            return (
+              <Tabs defaultActiveKey="1">
+                <TabPane tab="Assigned Devices" key="1">
+                  <Table
+                    rowKey="id"
+                    dataSource={data.assignedDevices}
+                    pagination={false}
+                    columns={[
+                      { title: 'Device Name', dataIndex: 'name' },
+                      {
+                        title: 'Actions',
+                        render: (_, record) => (
+                          <Button danger icon={<DeleteOutlined />} onClick={() => handleUnassign(record.id)}>
+                            Unassign
+                          </Button>
+                        ),
+                      },
+                    ]}
+                  />
+                </TabPane>
+                <TabPane tab="Unassigned Devices" key="2">
+                  <Table
+                    rowKey="id"
+                    dataSource={data.unassignedDevices}
+                    pagination={false}
+                    columns={[
+                      { title: 'Device Name', dataIndex: 'name' },
+                      {
+                        title: 'Assign To This Hub',
+                        render: (_, record) => (
+                          <Button icon={<UsbOutlined />} type="primary" onClick={() => handleAssign(record.id, hub.espId)}>
+                            Assign
+                          </Button>
+                        ),
+                      },
+                    ]}
+                  />
+                </TabPane>
+              </Tabs>
+            );
+          },
+          onExpand: (expanded, hub) => {
+            if (expanded) fetchDevicesForHub(hub.espId);
+          },
+        }}
+      />
 
       <Modal
         title={editMode ? 'Edit Hub' : 'Add Hub'}
@@ -247,25 +257,12 @@ export default function HubsPage() {
         footer={null}
         centered
       >
-         <Form form={form} layout="vertical" onFinish={handleSaveHub}>
-          <Form.Item name="espId" label="Hub ID" rules={[{ required: true, message: 'Hub ID is required' }]}>
-            <Input disabled={editMode} />
-          </Form.Item>
-          <Form.Item name="name" label="Hub Name" rules={[{ required: true, message: 'Hub name is required' }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="ssid" label="SSID" rules={[{ required: true, message: 'SSID is required' }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="password" label="Password" rules={[{ required: true, message: 'Password is required' }]}>
-            <Input.Password />
-          </Form.Item>
-          <Button
-            type="primary"
-            htmlType="submit"
-            block
-            style={{ backgroundColor: '#2B6873', borderColor: '#2B6873' }}
-          >
+        <Form form={form} layout="vertical" onFinish={handleSaveHub}>
+          <Form.Item name="espId" label="Hub ID" rules={[{ required: true, message: 'Hub ID is required' }]}> <Input disabled={editMode} /></Form.Item>
+          <Form.Item name="name" label="Hub Name" rules={[{ required: true, message: 'Hub name is required' }]}> <Input /></Form.Item>
+          <Form.Item name="ssid" label="SSID" rules={[{ required: true, message: 'SSID is required' }]}> <Input /></Form.Item>
+          <Form.Item name="password" label="Password" rules={[{ required: true, message: 'Password is required' }]}> <Input.Password /></Form.Item>
+          <Button type="primary" htmlType="submit" block style={{ backgroundColor: '#2B6873', borderColor: '#2B6873' }}>
             {editMode ? 'Update Hub' : 'Create Hub'}
           </Button>
         </Form>

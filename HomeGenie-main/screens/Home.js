@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   ScrollView, View, Text, StyleSheet, TouchableOpacity, Switch,
-  Alert, Modal, Pressable, ActivityIndicator, Animated, Easing
+  Alert, Modal, Pressable, ActivityIndicator, Animated, Easing,TextInput
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../utils/api';
@@ -48,6 +48,10 @@ export default function SmartDashboard() {
   const [roomPositions, setRoomPositions] = useState([]);
   const socketRef = useRef(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [currentDevice, setCurrentDevice] = useState(null);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await fetchCategoriesAndDevices(); // Your existing fetch function
@@ -152,51 +156,84 @@ export default function SmartDashboard() {
     };
   }, []);
   const toggleDevice = async (device) => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      const res = await api.patch(
-        `/api/devices/toggle/${device.id}`,
-        {}, // backend already handles the toggle
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-  
-      if (!res?.data) throw new Error("Invalid response");
-  
-      // Update local UI
-      setDevicesByRoom(prev => {
-        const updated = { ...prev };
-        const roomId = Object.keys(updated).find(id =>
-          updated[id].some(d => d.id === device.id)
-        );
-        if (roomId) {
-          updated[roomId] = updated[roomId].map(d =>
-            d.id === device.id ? { ...d, isOn: res.data.isOn } : d
-          );
-        }
-        return updated;
-      });
-    } catch (err) {
-      console.error("❌ Failed to toggle device:", err);
-      Alert.alert("Error", "Could not toggle device. Please try again.");
-    }
-  };
-  
-  
-  // Helper function to update device state in UI
-  const updateDeviceState = (deviceId, newStatus) => {
-    setDevicesByRoom(prev => {
-      const updated = { ...prev };
-      const roomId = Object.keys(updated).find(id =>
-        updated[id].some(d => d.id === deviceId)
-      );
-      if (roomId) {
-        updated[roomId] = updated[roomId].map(d =>
-          d.id === deviceId ? { ...d, status: newStatus } : d
-        );
+  const token = await AsyncStorage.getItem("token");
+  const newState = device.isOn ? 0 : 1;
+
+  // For doorlock, ask PIN first
+  if (device.type === 'doorlock') {
+    setCurrentDevice({ ...device, requestedState: newState }); // Save desired state
+    setPinModalVisible(true);
+    return;
+  }
+
+  try {
+    const res = await api.patch(
+      `/api/devices/${device.id}/state`,
+      { state: newState },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
       }
-      return updated;
-    });
-  };
+    );
+
+    if (!res?.data) throw new Error("Invalid response");
+
+    updateDeviceState(device.id, !!res.data.isOn);
+  } catch (err) {
+    console.error("❌ Failed to toggle device:", err);
+    Alert.alert("Error", "Toggle failed. Try again.");
+  }
+};
+const submitPinToggle = async () => {
+  if (!pinInput.trim() || !currentDevice) return Alert.alert("Enter a valid PIN");
+
+  try {
+    const token = await AsyncStorage.getItem("token");
+    const newState = currentDevice.requestedState ?? (currentDevice.isOn ? 0 : 1);
+
+    const res = await api.patch(
+      `/api/devices/${currentDevice.id}/state`,
+      { state: newState, pin: pinInput },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (res?.status === 200) {
+      updateDeviceState(currentDevice.id, !!res.data.isOn);
+      Alert.alert(`${currentDevice.name} ${newState ? 'Unlocked' : 'Locked'}`);
+    } else {
+      Alert.alert("Incorrect PIN", "PIN is incorrect.");
+    }
+  } catch (err) {
+    console.error("❌ PIN toggle failed:", err);
+    Alert.alert("Toggle failed via PIN. Please retry.");
+  } finally {
+    setPinModalVisible(false);
+    setPinInput('');
+    setCurrentDevice(null);
+  }
+};
+
+
+  // Helper function to update device state in UI
+  const updateDeviceState = (deviceId, isOn) => {
+  setDevicesByRoom(prev => {
+    const updated = { ...prev };
+    for (const roomId in updated) {
+      updated[roomId] = updated[roomId].map(device =>
+        device.id === deviceId ? { ...device, isOn } : device
+      );
+    }
+    return updated;
+  });
+};
+
   const scrollToRoom = (index) => {
     setSelectedRoomIndex(index);
     const yOffset = roomPositions[index] || index * 350;
@@ -261,7 +298,6 @@ export default function SmartDashboard() {
               </TouchableOpacity>
             ))}
           </View>
-
           {rooms.map((room, index) => (
             <View key={room.id} onLayout={(event) => measureRoomPosition(event.nativeEvent.layout.y, index)}>
               <View style={[styles.roomHeader, index === selectedRoomIndex && styles.activeRoomHeader]}>
@@ -299,8 +335,73 @@ export default function SmartDashboard() {
             </View>
           ))}
         </View>
+        <Modal
+        transparent={true}
+        animationType="fade"
+        visible={pinModalVisible}
+        onRequestClose={() => setPinModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Security Verification</Text>
+              <TouchableOpacity 
+                style={styles.closeButton} 
+                onPress={() => setPinModalVisible(false)}
+              >
+                <Text style={styles.closeButtonText}>×</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.modalContent}>
+              <Text style={styles.deviceNameText}>
+                {currentDevice?.name || 'Door Lock'}
+              </Text>
+              
+              <Text style={styles.pinInstructions}>
+                Please enter your 4-digit security PIN to {currentDevice?.isOn ? 'lock' : 'unlock'}
+              </Text>
+              
+              <TextInput
+                style={styles.pinInput}
+                placeholder="• • • • • •"
+                keyboardType="numeric"
+                secureTextEntry
+                value={pinInput}
+                onChangeText={setPinInput}
+                maxLength={6}
+                autoFocus
+              />
+              
+              <View style={styles.buttonRow}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => {
+                    setPinModalVisible(false);
+                    setPinInput('');
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.submitButton,
+                    pinInput.length < 4 && styles.submitButtonDisabled
+                  ]}
+                  onPress={submitPinToggle}
+                  disabled={pinInput.length < 4}
+                >
+                  <Text style={styles.submitButtonText}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
       </ScrollView>
     </View>
+    
   );
 }
 
@@ -329,4 +430,107 @@ const styles = StyleSheet.create({
   menuDots: { fontSize: 20, color: '#666' },
   emptyMessage: { textAlign: 'center', color: '#999', padding: 10 },
   loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f7fb' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    width: '85%',
+    backgroundColor: 'white',
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  modalHeader: {
+    backgroundColor: '#4299e1',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  closeButton: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: 'bold',
+    lineHeight: 24,
+  },
+  modalContent: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  deviceNameText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2d3748',
+    marginBottom: 10,
+  },
+  pinInstructions: {
+    textAlign: 'center',
+    color: '#718096',
+    marginBottom: 20,
+    fontSize: 16,
+  },
+  pinInput: {
+    width: '70%',
+    height: 50,
+    borderWidth: 1,
+    borderColor: '#cbd5e0',
+    borderRadius: 8,
+    fontSize: 20,
+    textAlign: 'center',
+    letterSpacing: 8,
+    marginBottom: 24,
+    backgroundColor: '#f7fafc',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  cancelButton: {
+    padding: 12,
+    borderRadius: 8,
+    width: '45%',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#cbd5e0',
+  },
+  cancelButtonText: {
+    color: '#4a5568',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  submitButton: {
+    backgroundColor: '#4299e1',
+    padding: 12,
+    borderRadius: 8,
+    width: '45%',
+    alignItems: 'center',
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#a0aec0',
+  },
+  submitButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
 });

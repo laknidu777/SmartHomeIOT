@@ -87,8 +87,9 @@ void checkResetButton() {
     } else if (millis() - buttonPressStartTime >= 6000) {
       preferences.begin("wifi", false);
       preferences.clear();
-      clearStoredDevices(); // also clear connected devices
       preferences.end();
+      clearStoredDevices(); // also clear connected devices
+      
       Serial.println("🔄 WiFi credentials cleared. Rebooting...");
       delay(1000);
       ESP.restart();
@@ -422,6 +423,30 @@ void backendSocketEvent(socketIOmessageType_t type, uint8_t * payload, size_t le
         webSocket.broadcastTXT(wsCommand);
         Serial.printf("📤 RESET → %s\n", wsCommand.c_str());
       }
+      else if (msg.indexOf("message") != -1 && msg.indexOf("RESET:") != -1) {
+        Serial.println("📦 Detected RESET command from backend");
+
+        int resetPos = msg.indexOf("RESET:");
+        if (resetPos == -1) return;
+
+        String resetCmd = msg.substring(resetPos);
+        int cmdEnd = resetCmd.indexOf("\"");
+        if (cmdEnd != -1) {
+          resetCmd = resetCmd.substring(0, cmdEnd);
+        }
+
+        String uuid = resetCmd.substring(6);
+        for (auto& entry : connectedDevices) {
+          if (entry.uuid == uuid) {
+            uint8_t clientId = entry.clientId;
+            String resetCommand = "RESET";
+            webSocket.sendTXT(clientId, resetCommand);
+            Serial.printf("🔁 Sent RESET to device %s\n", entry.id.c_str());
+            break;
+          }
+        }
+      }
+
       break;
     }
     case sIOtype_DISCONNECT: {
@@ -477,8 +502,10 @@ void clearStoredDevices() {
   preferences.begin("hubDevices", false);
   preferences.clear();
   preferences.end();
-  Serial.println("🧹 Cleared all stored device memory.");
+  connectedDevices.clear();
+  Serial.println("🧹 Cleared all stored device memory (Preferences + RAM).");
 }
+
 void setup() {
   Serial.begin(115200);
   pinMode(LED_PIN, OUTPUT);

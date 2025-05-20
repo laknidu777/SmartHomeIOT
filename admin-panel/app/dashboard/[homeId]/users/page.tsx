@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useRoleGuard } from '../../../hooks/useRoleGuard';
+
 import {
   Table,
   Button,
@@ -25,6 +27,7 @@ import axios from '@/lib/api';
 const { Title } = Typography;
 
 export default function UserManagementTable() {
+  useRoleGuard(['SuperAdmin']);
   const { homeId } = useParams();
   const router = useRouter();
 

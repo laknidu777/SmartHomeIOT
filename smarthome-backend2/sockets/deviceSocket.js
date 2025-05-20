@@ -52,7 +52,9 @@ export const registerDeviceSocketHandlers = (io) => {
   try {
     const parsed = typeof data === 'string' ? JSON.parse(data) : data;
     const espId = parsed.espId;
-    if (!espId) throw new Error('espId missing');
+    const type = parsed.type;
+    
+    if (!espId || !type) throw new Error('espId or type missing');
 
     console.log(`📲 Device attempting to register: ${espId}`);
     deviceSockets.set(espId, socket);
@@ -69,7 +71,11 @@ export const registerDeviceSocketHandlers = (io) => {
       socket.emit("assignUuid", { uuid: claimedDevice.id });
       console.log(`📤 Sent UUID to device ${espId}: ${claimedDevice.id}`);
     } else {
-      await NoUserDevice.upsert({ espId });
+      await NoUserDevice.upsert({
+        espId,
+        type,
+        connectedAt: new Date(),
+      });
       console.log(`🆕 Unclaimed device ${espId} inserted into NoUserDevice`);
     }
 

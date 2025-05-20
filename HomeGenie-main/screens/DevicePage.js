@@ -39,20 +39,36 @@ export default function DevicePage() {
   };
 
   const fetchDevices = async () => {
-    try {
-      setLoading(true);
-      const token = await AsyncStorage.getItem("token");
-      const res = await api.get("/api/devices/all", {
+  try {
+    setLoading(true);
+    const token = await AsyncStorage.getItem("token");
+    const homeId = await AsyncStorage.getItem("homeId");
+
+    const roomRes = await api.get(`/api/rooms/${homeId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const allRooms = roomRes.data || [];
+    setRooms(allRooms);
+
+    const allDevices = [];
+    for (const room of allRooms) {
+      const deviceRes = await api.get(`/api/devices/${room.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setDevices(res.data);
-    } catch (err) {
-      console.error("❌ Failed to fetch devices:", err);
-      Toast.show({ type: "error", text1: "Failed to load devices" });
-    } finally {
-      setLoading(false);
+      (deviceRes.data || []).forEach((device) => {
+        allDevices.push({ ...device, roomName: room.name });
+      });
     }
-  };
+
+    setDevices(allDevices);
+  } catch (err) {
+    console.error("❌ Failed to fetch devices:", err);
+    Toast.show({ type: "error", text1: "Failed to load devices" });
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   useEffect(() => {
     fetchDevices();
@@ -72,41 +88,62 @@ export default function DevicePage() {
   };
 
   const updateDevice = async () => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      const url = selectedDevice
-        ? `/api/devices/update/${selectedDevice.id}`
-        : "/api/devices";
-      const method = selectedDevice ? "put" : "post";
+  const token = await AsyncStorage.getItem("token");
+  const homeId = await AsyncStorage.getItem("homeId");
 
-      const res = await api[method](url, form, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+  if (!form.name || !form.espId || !form.roomId) {
+    return Alert.alert("Missing Fields", "Please fill in all required fields");
+  }
 
-      Toast.show({ type: "success", text1: selectedDevice ? "Device updated" : "Device added" });
-      setModalVisible(false);
-      fetchDevices();
-    } catch (err) {
-      console.error("❌ Save error:", err);
-      Toast.show({ type: "error", text1: "Failed to save device" });
-    }
-  };
+  if (form.type === "doorlock" && !form.pin) {
+    return Alert.alert("Missing PIN", "Please enter a PIN for doorlock devices");
+  }
 
-  const confirmDelete = (device) => {
-    Alert.alert("Delete Device", `Are you sure to delete ${device.name}?`, [
+  try {
+    const url = selectedDevice
+      ? `/api/devices/${selectedDevice.id}`
+      : `/api/devices/create`;
+    const method = selectedDevice ? "patch" : "post";
+
+    const body = {
+      ...form,
+      houseId: homeId, // required for create
+    };
+
+    const res = await api[method](url, body, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    Toast.show({
+      type: "success",
+      text1: selectedDevice ? "Device updated" : "Device added",
+    });
+    setModalVisible(false);
+    fetchDevices();
+  } catch (err) {
+    console.error("❌ Save error:", err);
+    Toast.show({ type: "error", text1: "Failed to save device" });
+  }
+};
+const confirmDelete = (device) => {
+  Alert.alert(
+    "Delete Device",
+    `Are you sure you want to delete ${device.name}?`,
+    [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
         style: "destructive",
         onPress: () => deleteDevice(device),
       },
-    ]);
-  };
+    ]
+  );
+};
 
   const deleteDevice = async (device) => {
     try {
       const token = await AsyncStorage.getItem("token");
-      await api.delete(`/api/devices/delete/${device.id}`, {
+      await api.delete(`/api/devices/${device.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       Toast.show({ type: "success", text1: "Device deleted" });

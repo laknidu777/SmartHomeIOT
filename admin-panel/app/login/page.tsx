@@ -113,7 +113,7 @@ export default function LoginPage() {
             loading={loading}
             size="large"
             style={{
-              backgroundColor: '#2B6873',
+              backgroundColor: '#005575',
               borderColor: '#2B6873',
               transition: 'all 0.3s',
             }}
@@ -127,7 +127,7 @@ export default function LoginPage() {
           <div style={{ textAlign: 'center', marginTop: 16 }}>
             <Text type="secondary">
               Don’t have an account?{' '}
-              <Link href="/signup" style={{ color: '#2B6873', fontWeight: 500 }}>
+              <Link href="/signup" style={{ color: '#005575', fontWeight: 500 }}>
                 Sign up
               </Link>
             </Text>

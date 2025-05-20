@@ -8,4 +8,5 @@ router.post('/assign-rooms', authenticate, assignRoomsToUser);
 router.get('/rooms/:userId/:homeId', authenticate, getRoomsForUser);
 router.post('/assign-devices', authenticate, assignDevicesToUser);
 router.get('/devices/:userId/:homeId', authenticate, getDevicesForUser);
+
 export default router;

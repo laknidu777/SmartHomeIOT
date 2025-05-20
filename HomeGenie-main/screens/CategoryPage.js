@@ -42,44 +42,47 @@ export default function CategoryPage({ navigation }) {
     }
   };
 
-  const handleSaveRoom = async () => {
-    const token = await AsyncStorage.getItem("token");
-    const homeId = await AsyncStorage.getItem("homeId");
-    if (!roomName.trim()) return Alert.alert("Room name is required");
+ const handleSaveRoom = async () => {
+  const token = await AsyncStorage.getItem("token");
+  const homeId = await AsyncStorage.getItem("homeId");
+  if (!roomName.trim()) return Alert.alert("Room name is required");
 
-    try {
-      const method = editingRoom ? "PUT" : "POST";
-      const url = editingRoom
-        ? `http://192.168.8.141:5000/api/rooms/${editingRoom.id}`
-        : "http://192.168.8.141:5000/api/rooms";
+  try {
+    const method = editingRoom ? "PATCH" : "POST";
+    const url = editingRoom
+      ? `http://192.168.8.141:5000/api/rooms/${editingRoom.id}`
+      : "http://192.168.8.141:5000/api/rooms/create";
 
-      const res = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name: roomName, homeId }),
+    const res = await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name: roomName, houseId: homeId }),
+    });
+
+    const contentType = res.headers.get("content-type");
+    const isJson = contentType && contentType.includes("application/json");
+    const data = isJson ? await res.json() : null;
+
+    if (res.ok) {
+      Toast.show({
+        type: "success",
+        text1: `Room ${editingRoom ? "updated" : "added"} successfully`,
       });
-
-      const data = await res.json();
-      if (res.ok) {
-        Toast.show({
-          type: "success",
-          text1: `Room ${editingRoom ? "updated" : "added"} successfully`,
-        });
-        setModalVisible(false);
-        setRoomName("");
-        setEditingRoom(null);
-        fetchRooms();
-      } else {
-        Alert.alert("Failed to save room", data?.error || "Unknown error");
-      }
-    } catch (err) {
-      console.error("Save error:", err);
-      Alert.alert("Error", "Failed to save room");
+      setModalVisible(false);
+      setRoomName("");
+      setEditingRoom(null);
+      fetchRooms();
+    } else {
+      Alert.alert("Failed to save room", data?.error || "Unknown error");
     }
-  };
+  } catch (err) {
+    console.error("Save error:", err);
+    Alert.alert("Error", "Failed to save room");
+  }
+};
 
   const handleDeleteRoom = async (roomId) => {
     const token = await AsyncStorage.getItem("token");

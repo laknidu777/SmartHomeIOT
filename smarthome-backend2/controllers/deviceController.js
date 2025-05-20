@@ -1,6 +1,9 @@
 import { UserHome, UserHomeRoom, UserHomeDevice, Room, Device, NoUserDevice,Hub } from '../models/index.js';
 import { deviceSockets, hubSockets ,globalIo } from '../sockets/deviceSocket.js';
 //import { deviceSockets } from '../sockets/deviceSocket.js';
+import bcrypt from 'bcrypt';
+const DEFAULT_PIN = '123456'; // ✅ This is your default PIN
+
 
 export const claimDevice = async (req, res) => {
   try {
@@ -30,6 +33,8 @@ export const claimDevice = async (req, res) => {
       homeId: houseId,
       isOn: false,
       isOnline: true,
+      type: noUserEntry.type,
+      pin: noUserEntry.type === 'doorlock' ? bcrypt.hashSync(DEFAULT_PIN, 10) : null,
     });
 
     // Step 4: Link device to userHome
@@ -125,21 +130,29 @@ export const getDevicesForRoom = async (req, res) => {
 export const updateDevice = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, roomId } = req.body;
+    const { name, roomId, pin } = req.body;
 
     const device = await Device.findByPk(id);
     if (!device) return res.status(404).json({ message: 'Device not found' });
 
     device.name = name;
-    device.RoomId = roomId; // ✅ this is the key fix
+    device.RoomId = roomId;
+
+    // ✅ Only update PIN if type is doorlock and PIN is provided
+    if (device.type === 'doorlock' && pin) {
+      const bcrypt = await import('bcrypt');
+      device.pin = await bcrypt.default.hash(pin, 10);
+    }
 
     await device.save();
 
     res.status(200).json({ message: 'Device updated', device });
   } catch (err) {
+    console.error('❌ updateDevice error:', err);
     res.status(500).json({ message: 'Failed to update device', error: err.message });
   }
 };
+
 // DELETE /devices/:id
 export const deleteDevice = async (req, res) => {
   try {
@@ -188,7 +201,6 @@ export const assignDeviceToHub = async (req, res) => {
     res.status(500).json({ message: 'Failed to assign device', error: err.message });
   }
 };
-
 export const unassignDeviceFromHub = async (req, res) => {
   try {
     const { id } = req.params;
@@ -197,21 +209,26 @@ export const unassignDeviceFromHub = async (req, res) => {
 
     const hubSocket = hubSockets.get(device.assignedHubId);
     if (hubSocket) {
-      const resetCmd = `RESET:${device.espId}`;
+      const resetCmd = `RESET:${device.id}`; // Use UUID to identify the device
       hubSocket.send(resetCmd);
-      console.log(`🔄 Sent RESET command to Hub for device ${device.espId}`);
+      console.log(`🔄 Sent RESET command to Hub ${device.assignedHubId} for device ${device.espId}`);
+    } else {
+      console.warn(`⚠️ Hub ${device.assignedHubId} is not online`);
     }
 
+    // Clear assignment from DB
     device.assignedHubId = null;
     device.hubSsid = null;
     device.hubPassword = null;
     await device.save();
 
-    res.status(200).json({ message: 'Device unassigned from hub', device });
+    res.status(200).json({ message: 'Device unassigned from hub and reset initiated', device });
   } catch (err) {
+    console.error('💥 Error in unassignDeviceFromHub:', err);
     res.status(500).json({ message: 'Failed to unassign device', error: err.message });
   }
 };
+
 
 // export const setDeviceState = async (req, res) => {
 //   try {
@@ -307,5 +324,90 @@ export const markDeviceOffline = async (req, res) => {
     res.status(500).json({ message: 'Failed to mark device offline', error: err.message });
   }
 };
+// GET /devices/hub/:hubId
+// export const getDevicesForHub = async (req, res) => {
+//   try {
+//     const { hubId } = req.params;
+//     const userId = req.userId;
+
+//     // Find the hub
+//     const hub = await Hub.findOne({ where: { espId: hubId } });
+//     if (!hub) return res.status(404).json({ message: 'Hub not found' });
+
+//     // Check user-home access
+//     const userHome = await UserHome.findOne({
+//       where: { UserId: userId, HouseId: hub.HouseId },
+//     });
+//     if (!userHome) {
+//       return res.status(403).json({ message: 'User not linked to this house' });
+//     }
+
+//     // Get devices assigned to this hub
+//     const devices = await Device.findAll({
+//       where: { assignedHubId: hubId, homeId: hub.HouseId },
+//     });
+
+//     res.status(200).json(devices);
+//   } catch (err) {
+//     console.error('❌ getDevicesForHub error:', err);
+//     res.status(500).json({ message: 'Failed to fetch devices for hub', error: err.message });
+//   }
+// };
+// GET /devices/hub/:hubId/assignment-overview
+export const getHubDeviceAssignmentOverview = async (req, res) => {
+  try {
+    const { hubId } = req.params;
+    const userId = req.userId;
+
+    // 1. Find the hub
+    const hub = await Hub.findOne({ where: { espId: hubId } });
+    if (!hub) return res.status(404).json({ message: 'Hub not found' });
+
+    // 2. Check user access to this house
+    const userHome = await UserHome.findOne({
+      where: { UserId: userId, HouseId: hub.HouseId },
+    });
+    if (!userHome) {
+      return res.status(403).json({ message: 'User not linked to this house' });
+    }
+
+    // 3. Fetch assigned devices
+    const assignedDevices = await Device.findAll({
+      where: { assignedHubId: hubId, homeId: hub.HouseId },
+    });
+
+    // 4. Fetch unassigned devices in the same house
+    const unassignedDevices = await Device.findAll({
+      where: { assignedHubId: null, homeId: hub.HouseId },
+    });
+
+    res.status(200).json({
+      assignedDevices,
+      unassignedDevices,
+    });
+  } catch (err) {
+    console.error('❌ getHubDeviceAssignmentOverview error:', err);
+    res.status(500).json({ message: 'Failed to fetch device assignment overview', error: err.message });
+  }
+};
+// // PATCH /devices/:id/pin
+// export const updateDevicePin = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const { newPin } = req.body;
+
+//     const device = await Device.findByPk(id);
+//     if (!device || device.type !== 'doorlock') {
+//       return res.status(400).json({ message: 'Device not found or not a doorlock' });
+//     }
+
+//     device.pin = await bcrypt.hash(newPin, 10);
+//     await device.save();
+
+//     res.status(200).json({ message: 'PIN updated successfully' });
+//   } catch (err) {
+//     res.status(500).json({ message: 'Failed to update PIN', error: err.message });
+//   }
+// };
 
 

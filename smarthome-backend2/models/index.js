@@ -48,20 +48,33 @@ const NoUserDevice = NoUserDeviceModel(sequelize);
 // User ↔ UserHome ↔ House
 User.hasMany(UserHome);
 UserHome.belongsTo(User);
-House.hasMany(UserHome);
+House.hasMany(UserHome, {
+  foreignKey: 'HouseId',
+  onDelete: 'CASCADE',
+});
 UserHome.belongsTo(House);
 
 // House ↔ Room
-House.hasMany(Room);
+House.hasMany(Room, {
+  foreignKey: 'HouseId',
+  onDelete: 'CASCADE',
+});
 Room.belongsTo(House);
+
 
 // House ↔ Hub
 House.hasMany(Hub);
 Hub.belongsTo(House);
 
 // Room ↔ Devices (optional if needed)
-Room.hasMany(Device);
-Device.belongsTo(Room, { foreignKey: { allowNull: true }, onDelete: 'SET NULL' });
+Room.hasMany(Device, {
+  foreignKey: 'RoomId',
+  onDelete: 'CASCADE',
+});
+Device.belongsTo(Room, {
+  foreignKey: 'RoomId',
+  onDelete: 'CASCADE',
+});
 
 // UserHome ↔ Rooms (Many-to-Many)
 UserHome.belongsToMany(Room, { through: UserHomeRoom, foreignKey: 'userHomeId' });

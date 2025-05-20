@@ -23,6 +23,8 @@ export default function SelectHome() {
   const [newHomeName, setNewHomeName] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [newHomeAddress, setNewHomeAddress] = useState("");
+
 
   useFocusEffect(
     React.useCallback(() => {
@@ -38,7 +40,7 @@ export default function SelectHome() {
       setIsLoading(true);
       try {
         const token = await AsyncStorage.getItem("token");
-        const res = await api.get("/api/homes", {
+        const res = await api.get("/api/houses/my-houses", {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -60,33 +62,36 @@ export default function SelectHome() {
   }, []);
 
   const handleAddHome = async () => {
-    if (!newHomeName.trim()) return Alert.alert("Enter a valid home name");
+  if (!newHomeName.trim() || !newHomeAddress.trim())
+    return Alert.alert("Enter valid home name and address");
 
-    try {
-      const token = await AsyncStorage.getItem("token");
-      const res = await api.post(
-        "/api/homes",
-        { name: newHomeName },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (res.status === 201) {
-        const newHome = { id: res.data.homeId, name: newHomeName };
-        setHomes([...homes, newHome]);
-        setNewHomeName("");
-        setModalVisible(false);
-      } else {
-        Alert.alert("Error", res.data?.error || "Something went wrong");
+  try {
+    const token = await AsyncStorage.getItem("token");
+    const res = await api.post(
+      "/api/houses/create",
+      { name: newHomeName, address: newHomeAddress },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       }
-    } catch (error) {
-      console.error("❌ Error adding home:", error);
-      Alert.alert("Failed to add home");
+    );
+
+    if (res.status === 201) {
+      const newHome = { id: res.data.house.id, name: res.data.house.name };
+      setHomes([...homes, newHome]);
+      setNewHomeName("");
+      setNewHomeAddress("");
+      setModalVisible(false);
+    } else {
+      Alert.alert("Error", res.data?.error || "Something went wrong");
     }
-  };
+  } catch (error) {
+    console.error("❌ Error adding home:", error);
+    Alert.alert("Failed to add home");
+  }
+};
+
 
   const handleHomeSelect = async (home) => {
     await AsyncStorage.setItem("homeId", String(home.id));
@@ -198,7 +203,14 @@ export default function SelectHome() {
               onChangeText={setNewHomeName}
               placeholderTextColor="#a0aec0"
             />
-
+            <Text style={styles.modalLabel}>Address</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Enter home address"
+              value={newHomeAddress}
+              onChangeText={setNewHomeAddress}
+              placeholderTextColor="#a0aec0"
+            />
             <View style={styles.modalButtonsContainer}>
               <TouchableOpacity
                 style={styles.modalCancelButton}

@@ -183,6 +183,18 @@ void onHubWsEvent(WStype_t type, uint8_t * payload, size_t length) {
             Serial.println("❌ Malformed ASSIGN string – missing comma");
           }
         }
+        else if (msg.startsWith("RESET:")) {
+      String incomingUuid = msg.substring(6);
+      String storedUuid = loadUuidFromPreferences();  // ← implement this if not present
+      clearAllCredentials();  
+
+      if (storedUuid == incomingUuid) {
+        Serial.println("🧨 UUID matched. Resetting device...");
+        //clearAllCredentials();               // ← implement this function
+      } else {
+        Serial.println("⚠️ RESET received but UUID does not match");
+      }
+    }
         // Handle COMMAND messages 
         else if (msg.startsWith("COMMAND:")) {
           String command = msg.substring(8); // Remove "COMMAND:"
@@ -256,10 +268,19 @@ void connectToHubAP() {
 }
 // ===== BACKEND MODE =====
 void handleBackendEvents() {
-  backendSocket.on("connect", [](const char* payload, size_t length) {
-    Serial.println("🔌 Connected to Backend WS");
-    String json = "{\"espId\":\"" + espId + "\"}";
-    backendSocket.emit("registerDevice", json.c_str());
+    backendSocket.on("connect", [](const char *payload, size_t length) {
+    Serial.println("📡 Connected to backend");
+
+    DynamicJsonDocument doc(256);
+    doc["espId"] = espId;
+    doc["type"] = "doorlock";  // 🔁 Change this per device type
+
+    String jsonString;
+    serializeJson(doc, jsonString);
+
+    backendSocket.emit("registerDevice", jsonString.c_str());
+
+    Serial.println("📤 Sent device registration with type to backend");
   });
   backendSocket.on("assignUuid", [](const char *payload, size_t length) {
   String raw = String(payload).substring(0, length);
