@@ -4,11 +4,7 @@
 #include <WebSocketsClient.h>
 #include <Preferences.h>
 #include <ArduinoJson.h>
-
-
-
 String espId = "";  // <-- Will be generated from chip ID
-
 const uint8_t RELAY_PIN = 2;     // Signal pin (D2)
 const uint8_t LED_PIN = 4;
 const uint8_t RESET_PIN = 12;
@@ -17,40 +13,31 @@ const unsigned long RESET_PRESS_DURATION = 3000; // Reduced to 3 seconds for res
 Preferences preferences;
 String hubSsid = "";
 String hubPassword = "";
-
 SocketIoClient backendSocket;
 WebSocketsClient hubSocket;
-
 bool isInHubMode = false;
 unsigned long buttonPressStartTime = 0;
 bool buttonPressed = false;
-
 unsigned long lastBlink = 0;
 bool ledState = false;
-
-
 String loadUuidFromPreferences() {
   preferences.begin("uuid", true); // read-only mode
   String uuid = preferences.getString("value", "");
   preferences.end();
   return uuid;
 }
-
 void saveUuidToPreferences(const String& uuid) {
   preferences.begin("uuid", false); // write mode
   preferences.putString("value", uuid);
   preferences.end();
   Serial.println("✅ UUID saved to Preferences: " + uuid);
 }
-
 void clearUuidFromPreferences() {
   preferences.begin("uuid", false);
   preferences.clear();
   preferences.end();
   Serial.println("🧹 UUID cleared from Preferences");
 }
-
-
 void saveHubCreds(String ssid, String password) {
   preferences.begin("hub", false);
   preferences.putString("ssid", ssid);
@@ -58,7 +45,6 @@ void saveHubCreds(String ssid, String password) {
   preferences.end();
   Serial.println("💾 Saved hub credentials");
 }
-
 void loadHubCreds() {
   preferences.begin("hub", true);
   hubSsid = preferences.getString("ssid", "");
@@ -66,7 +52,6 @@ void loadHubCreds() {
   preferences.end();
   Serial.printf("📋 Loaded hub credentials - SSID: %s\n", hubSsid.c_str());
 }
-
 void clearAllCredentials() {
   Serial.println("🧹 CLEARING ALL CREDENTIALS!");
   clearUuidFromPreferences();
@@ -94,7 +79,6 @@ void clearAllCredentials() {
     digitalWrite(LED_PIN, i % 2);
     delay(200);
   }
-  
   Serial.println("🔄 All credentials cleared. Rebooting...");
   delay(1000);
   ESP.restart();
@@ -122,12 +106,10 @@ void checkResetButton() {
       preferences.begin("hub", false); // Optional: in case you store anything else
       preferences.clear();
       preferences.end();
-
       for (int i = 0; i < 10; i++) {
         digitalWrite(LED_PIN, i % 2);
         delay(200);
       }
-
       Serial.println("🔁 Rebooting after wipe");
       delay(1000);
       ESP.restart();
@@ -147,8 +129,7 @@ void onHubWsEvent(WStype_t type, uint8_t * payload, size_t length) {
       hubSocket.sendTXT(heartbeat);
       Serial.println("❤️ Sent initial heartbeat to Hub: " + heartbeat);
       break;
-    }
-      
+    }   
     case WStype_DISCONNECTED:{
       Serial.println("❌ Disconnected from Hub WS");
       break;
@@ -157,44 +138,10 @@ void onHubWsEvent(WStype_t type, uint8_t * payload, size_t length) {
       {
         String msg = String((char*)payload);
         Serial.printf("📥 Message from Hub: %s\n", msg.c_str());
-        
-        // Handle ASSIGN command specifically
-        if (msg.startsWith("ASSIGN:")) {
-          Serial.println("📦 Received ASSIGN command from hub");
-          String creds = msg.substring(7); // Skip "ASSIGN:"
-          int comma = creds.indexOf(',');
-          
-          if (comma != -1) {
-            String ssid = creds.substring(0, comma);
-            String password = creds.substring(comma + 1);
-            ssid.trim(); 
-            password.trim();
-            
-            Serial.printf("🔐 Parsed SSID: %s | Password: %s\n", ssid.c_str(), password.c_str());
-            saveHubCreds(ssid, password);
-            
-            // Confirm receipt before restarting
-            hubSocket.sendTXT("ASSIGN_ACK:" + espId);
-            Serial.println("✅ Sent acknowledgment to hub");
-            
-            delay(1000); // let socket process before reset
-            ESP.restart();  // reboot to reconnect using new hub credentials
-          } else {
-            Serial.println("❌ Malformed ASSIGN string – missing comma");
-          }
+        if (msg.startsWith("RESET")) {
+           Serial.println("📥 RESET command received via WebSocket");
+          clearAllCredentials();
         }
-        else if (msg.startsWith("RESET:")) {
-      String incomingUuid = msg.substring(6);
-      String storedUuid = loadUuidFromPreferences();  // ← implement this if not present
-      clearAllCredentials();  
-
-      if (storedUuid == incomingUuid) {
-        Serial.println("🧨 UUID matched. Resetting device...");
-        //clearAllCredentials();               // ← implement this function
-      } else {
-        Serial.println("⚠️ RESET received but UUID does not match");
-      }
-    }
         // Handle COMMAND messages 
         else if (msg.startsWith("COMMAND:")) {
           String command = msg.substring(8); // Remove "COMMAND:"
@@ -223,57 +170,50 @@ void onHubWsEvent(WStype_t type, uint8_t * payload, size_t length) {
 }
 void connectToHubAP() {
   Serial.printf("🔁 Connecting to Hub AP: %s\n", hubSsid.c_str());
-  
-  // Clear any existing WiFi connections first
-  WiFi.disconnect();
+
+  // Disconnect without clearing saved credentials
+  WiFi.disconnect(true);        // true = erase current session
+  WiFi.mode(WIFI_STA);          // Station mode for connecting to AP
   delay(100);
-  
-  // Make sure we're in station mode
-  WiFi.mode(WIFI_STA);
-  delay(100);
-  
-  // Start the connection attempt with specific credentials
+
+  Serial.printf("🧪 WiFi.begin(%s, %s)\n", hubSsid.c_str(), hubPassword.c_str());
   WiFi.begin(hubSsid.c_str(), hubPassword.c_str());
 
   int tries = 0;
-  while (WiFi.status() != WL_CONNECTED && tries < 20) {
-    digitalWrite(LED_PIN, tries % 2); // Blink LED during connection attempts
+  while (WiFi.status() != WL_CONNECTED && tries < 40) {  // 10 seconds total
+    digitalWrite(LED_PIN, tries % 2); // Blink LED
     delay(250);
     Serial.print(".");
     tries++;
   }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✅ Connected to Hub AP");
-    Serial.printf("📍 IP address: %s\n", WiFi.localIP().toString().c_str());
-    isInHubMode = true;
+  Serial.println(); // newline after dots
+  Serial.printf("🛑 Final WiFi status: %d\n", WiFi.status());
 
-    // Initialize WebSocket connection to hub
-    // The default WebSocketsClient port for the hub should be 81
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("✅ Connected to Hub AP");
+    Serial.printf("📍 IP address: %s\n", WiFi.localIP().toString().c_str());
+
+    // Begin WebSocket connection to Hub (default port 81)
     hubSocket.begin("192.168.4.1", 81, "/");
     hubSocket.onEvent(onHubWsEvent);
-    hubSocket.setReconnectInterval(5000); // Reconnect every 5s if connection fails
-    
+    hubSocket.setReconnectInterval(5000);
+    isInHubMode = true; 
     Serial.println("🔌 WebSocket connection to hub initiated");
   } else {
-    Serial.println("\n❌ Failed to connect to Hub AP.");
-    // Clear stored hub creds so next reboot tries backend
-    preferences.begin("hub", false);
-    preferences.clear();
-    preferences.end();
-    Serial.println("🗑️ Cleared hub credentials due to connection failure");
-    delay(1000);
-    ESP.restart();
+    Serial.println("⚠️ Failed to connect to Hub AP. Will retry on next boot.");
+    delay(3000);
+    ESP.restart();  // DO NOT clear credentials here
   }
 }
-// ===== BACKEND MODE =====
+// ===== BACKEND MODE ===== //
 void handleBackendEvents() {
     backendSocket.on("connect", [](const char *payload, size_t length) {
     Serial.println("📡 Connected to backend");
 
     DynamicJsonDocument doc(256);
     doc["espId"] = espId;
-    doc["type"] = "doorlock";  // 🔁 Change this per device type
+    doc["type"] = "light";  // 🔁 Change this per device type
 
     String jsonString;
     serializeJson(doc, jsonString);
@@ -320,10 +260,11 @@ backendSocket.on("deviceCommand", [](const char *payload, size_t length) {
       String ssid = creds.substring(0, comma);
       String password = creds.substring(comma + 1);
       ssid.trim(); password.trim();
-
       Serial.printf("🔐 Parsed Hub SSID: %s | Password: %s\n", ssid.c_str(), password.c_str());
-
       saveHubCreds(ssid, password);
+       preferences.begin("mode", false);                   // 🔥 ADD THIS BLOCK
+       preferences.putBool("hubMode", true);
+       preferences.end();
       Serial.printf("💾 Saved SSID = %s | Saved Password = %s\n", ssid.c_str(), password.c_str());
       delay(500);
       ESP.restart();  // reboot to connect to hub
@@ -381,90 +322,81 @@ backendSocket.on("deviceCommand", [](const char *payload, size_t length) {
   });
 }
 void setup() {
-
+    // --- Load UUID ---
   String loadedUuid = loadUuidFromPreferences();
-  Serial.println("🧾 UUID from Prefereces: " + loadedUuid);
+  Serial.println("🧾 UUID from Preferences: " + loadedUuid);
 
+  // --- Init Serial and Pins ---
   Serial.begin(115200);
-  delay(1000); // Give serial time to connect
-  
+  delay(1000);
+
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
-  pinMode(RESET_PIN, INPUT_PULLUP); // This should make button HIGH when not pressed
-  
+  pinMode(RESET_PIN, INPUT_PULLUP);
+
   digitalWrite(RELAY_PIN, LOW);
-  digitalWrite(LED_PIN, HIGH);  // Turn on LED initially
-  
+  digitalWrite(LED_PIN, HIGH);
+
   Serial.println("\n\n===============================");
   Serial.println("🚀 ESP32 STARTING UP");
   Serial.println("===============================");
 
-  // ✅ Generate unique ESP ID from chip
+  // --- Generate ESP ID ---
   uint64_t chipId = ESP.getEfuseMac();
   char idStr[20];
-  snprintf(idStr, sizeof(idStr), "esp_%04X%08X",
-           (uint16_t)(chipId >> 32), (uint32_t)chipId);
+  snprintf(idStr, sizeof(idStr), "esp_%04X%08X", (uint16_t)(chipId >> 32), (uint32_t)chipId);
   espId = String(idStr);
   Serial.println("🆔 Generated ESP ID: " + espId);
 
-  // Check for reset button three times over 3 seconds (debounce)
+  // --- Check Reset Button ---
   int pressedCount = 0;
   Serial.println("🔘 Checking reset button state at startup...");
-  
   for (int i = 0; i < 3; i++) {
     int buttonState = digitalRead(RESET_PIN);
     Serial.printf("🔘 Reset button reading %d: %s\n", i, buttonState == LOW ? "PRESSED" : "RELEASED");
-    
-    if (buttonState == LOW) {
-      pressedCount++;
-    }
-    
-    digitalWrite(LED_PIN, i % 2); // Blink LED during check
+    if (buttonState == LOW) pressedCount++;
+    digitalWrite(LED_PIN, i % 2);
     delay(150);
   }
-  
-  // If the button appears to be consistently pressed at startup
   if (pressedCount >= 2) {
-    Serial.println("⚠️ Reset button appears to be pressed at startup!");
-    Serial.println("🔄 Will perform factory reset now");
-    clearAllCredentials(); // This will reboot the ESP
+    Serial.println("⚠️ Reset button held. Performing full factory reset...");
+    clearAllCredentials(); // ← Should wipe everything intentionally
+    return;
   }
-  loadHubCreds();
 
-  if (hubSsid != "") {
-    connectToHubAP();
-  } else {
-    Serial.println("📋 No hub credentials found, connecting to backend Wi-Fi");
-    WiFiManager wm;
-    
-    // Make sure WiFiManager will create its own AP if connection fails
-    wm.setConfigPortalTimeout(120); // 2 minutes timeout for config portal
-    
-    // Add a custom reset parameter to menu
-    WiFiManagerParameter custom_reset_button("reset_button", "Reset All Settings", "Reset", 6);
-    wm.addParameter(&custom_reset_button);
-
-    bool connected = wm.autoConnect("Device_Setup");
-    
-    if (connected) {
-      Serial.println("✅ Connected to backend Wi-Fi");
-      Serial.println("📡 Attempting socket connection to backend..."); 
-      backendSocket.begin("192.168.8.141", 5000);
-      handleBackendEvents();
+  // --- Check if Hub Mode ---
+  preferences.begin("mode", true);
+  bool isHubMode = preferences.getBool("hubMode", false);
+  preferences.end();
+  if (isHubMode) {
+    loadHubCreds(); // This loads hubSsid and hubPassword
+    if (hubSsid != "") {
+      connectToHubAP(); // → will init WebSocket to Hub
+      isInHubMode = true;
+      return;
     } else {
-      Serial.println("❌ Failed to connect to WiFi, will reboot and try again");
-      delay(3000);
-      ESP.restart();
+      Serial.println("⚠️ Hub mode set but credentials missing. Falling back to backend WiFi.");
     }
   }
-  
-  // Final setup debug info
-  Serial.println("🔄 Setup complete, entering main loop");
-  Serial.printf("📊 Status: Hub Mode = %s, Connected to %s\n", 
-                isInHubMode ? "YES" : "NO", 
-                WiFi.SSID().c_str());
-}
 
+  // --- Backend WiFi via WiFiManager ---
+  Serial.println("📋 No hub mode. Connecting to backend Wi-Fi");
+  WiFiManager wm;
+  wm.setConfigPortalTimeout(120);  // config timeout
+  WiFiManagerParameter custom_reset_button("reset_button", "Reset All Settings", "Reset", 6);
+  wm.addParameter(&custom_reset_button);
+
+  bool connected = wm.autoConnect("Device_Setup");
+  if (connected) {
+    Serial.println("✅ Connected to backend Wi-Fi");
+    backendSocket.begin("192.168.8.141", 5000);
+    handleBackendEvents();
+  } else {
+    Serial.println("❌ Failed to connect. Restarting...");
+    delay(3000);
+    ESP.restart();
+  }
+}
 void loop() {
   checkResetButton();
 
