@@ -1,8 +1,7 @@
-// components/HeaderBar.js
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function HeaderBar({ onMenuPress, userInitial = 'A' }) {
+export default function HeaderBar({ onMenuPress }) {
   return (
     <View style={{
       height: 56,
@@ -18,19 +17,10 @@ export default function HeaderBar({ onMenuPress, userInitial = 'A' }) {
       </TouchableOpacity>
 
       <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>
-        Smart Home
+        AHG
       </Text>
 
-      <View style={{
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: 'white',
-        justifyContent: 'center',
-        alignItems: 'center'
-      }}>
-        <Text style={{ fontWeight: 'bold', color: '#00A6FF' }}>{userInitial}</Text>
-      </View>
+      {/* Removed user icon */}
     </View>
   );
 }

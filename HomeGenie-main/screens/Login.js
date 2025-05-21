@@ -60,7 +60,7 @@ export default function Login() {
 
     setIsLoading(true);
     try {
-      console.log("🔐 Logging in with:", email);
+      //console.log("🔐 Logging in with:", email);
       const res = await api.post("/api/auth/login", {
         email,
         password,
@@ -72,11 +72,13 @@ export default function Login() {
 //      await AsyncStorage.setItem("userId", String(user.id));
 //      await AsyncStorage.setItem("email", user.email);
 //      await AsyncStorage.setItem("name", user.name);
+        // await AsyncStorage.setItem('name', res.data.name); // or a fallback like 'User'
+        // await AsyncStorage.setItem('email', res.data.email);
       setAuthToken(token);
 
       navigation.navigate("SelectHome");
     } catch (error) {
-      console.error("❌ Login error:", error.response?.data || error.message);
+      //console.error("❌ Login error:", error.response?.data || error.message);
 
       let errorMessage =
         error.response?.data?.error ||

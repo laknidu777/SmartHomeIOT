@@ -9,6 +9,11 @@ const uint8_t RELAY_PIN = 2;     // Signal pin (D2)
 const uint8_t LED_PIN = 4;
 const uint8_t RESET_PIN = 12;
 const unsigned long RESET_PRESS_DURATION = 3000; // Reduced to 3 seconds for reset
+const uint8_t SWITCH_PIN = 14;  
+bool relayState = false;
+bool lastSwitchState = HIGH;
+unsigned long lastDebounceTime = 0;
+const unsigned long debounceDelay = 50;
 
 Preferences preferences;
 String hubSsid = "";
@@ -333,6 +338,10 @@ void setup() {
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
   pinMode(RESET_PIN, INPUT_PULLUP);
+  pinMode(SWITCH_PIN, INPUT_PULLUP);   // Button input with pull-up
+  pinMode(RELAY_PIN, OUTPUT);          // Relay output
+  digitalWrite(RELAY_PIN, LOW);        // Ensure relay is initially OFF
+
 
   digitalWrite(RELAY_PIN, LOW);
   digitalWrite(LED_PIN, HIGH);
@@ -382,6 +391,11 @@ void setup() {
   // --- Backend WiFi via WiFiManager ---
   Serial.println("📋 No hub mode. Connecting to backend Wi-Fi");
   WiFiManager wm;
+  // --- Add ESP32 ID Display Field ---
+String espDisplay = "<p style='font-size:16px'><b>Device ID:</b><input type='text' value='" + espId + "' readonly style='width:100%;padding:5px;border:1px solid #ccc;border-radius:4px;' onclick='this.select();document.execCommand(\"copy\")'></p>";
+WiFiManagerParameter espIdHtml(espDisplay.c_str());
+wm.addParameter(&espIdHtml);
+
   wm.setConfigPortalTimeout(120);  // config timeout
   WiFiManagerParameter custom_reset_button("reset_button", "Reset All Settings", "Reset", 6);
   wm.addParameter(&custom_reset_button);
@@ -429,4 +443,16 @@ void loop() {
       Serial.println("❤️ Sent JSON heartbeat to Backend: " + json);
     }
   }
+    // --- Handle Physical Switch for Relay Toggle ---
+  // --- Read physical switch and match state ---
+bool switchState = digitalRead(SWITCH_PIN);
+
+// If switch is LOW, turn relay ON. If HIGH, turn relay OFF.
+if (switchState != lastSwitchState) {
+  lastSwitchState = switchState; // Update for next comparison
+
+  relayState = (switchState == LOW);  // LOW = ON
+  digitalWrite(RELAY_PIN, relayState ? HIGH : LOW);
+  Serial.println(relayState ? "🔀 Relay turned ON via toggle switch" : "🔀 Relay turned OFF via toggle switch");
+}
 }

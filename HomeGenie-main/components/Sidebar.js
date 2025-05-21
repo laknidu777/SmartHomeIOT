@@ -17,7 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 
 export default function Sidebar({ visible, onClose }) {
-  const [darkMode, setDarkMode] = useState(false);
+  //const [darkMode, setDarkMode] = useState(false);
   const slideAnimation = new Animated.Value(0);
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
@@ -105,8 +105,8 @@ export default function Sidebar({ visible, onClose }) {
           {/* Menu */}
           <ScrollView style={styles.sidebarMenu}>
             <MenuSection title="Main">
-              <MenuItem title="Dashboard" icon="grid-outline" active />
-              <MenuItem title="Rooms" icon="home-outline" />
+              <MenuItem title="Dashboard" icon="grid-outline" active onPress={() => navigation.navigate("Home")} />
+              <MenuItem title="Rooms" icon="home-outline" onPress={() => navigation.navigate("CategoryPage")} />
               <MenuItem title="Devices" icon="bulb-outline" badge="3" 
                 onPress={() => navigation.navigate("DevicePage")}>
               </MenuItem>
@@ -117,8 +117,8 @@ export default function Sidebar({ visible, onClose }) {
 
             <MenuSection title="Automation">
               <MenuItem title="Schedules" icon="alarm-outline" onPress={() => navigation.navigate("ScheduleScreen")} />
-              <MenuItem title="Scenes" icon="images-outline" />
-              <MenuItem title="Routines" icon="sync-outline" />
+              {/* <MenuItem title="Scenes" icon="images-outline" />
+              <MenuItem title="Routines" icon="sync-outline" /> */}
             </MenuSection>
 
             <MenuSection title="Support">
@@ -131,10 +131,10 @@ export default function Sidebar({ visible, onClose }) {
 
           {/* Footer */}
           <View style={styles.sidebarFooter}>
-            <View style={styles.themeToggle}>
+            {/* <View style={styles.themeToggle}>
               <Text style={styles.toggleLabel}>Dark Mode</Text>
               <Switch value={darkMode} onValueChange={setDarkMode} />
-            </View>
+            </View> */}
             <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
               <Ionicons name="log-out-outline" size={20} color="#e53e3e" />
               <Text style={styles.logoutText}>Log Out</Text>

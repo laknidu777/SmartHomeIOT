@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ESP32 Device Info</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial, sans-serif; padding: 30px; text-align: center; }
+    #espId { font-size: 24px; margin: 20px 0; color: #333; word-wrap: break-word; }
+    button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    #status { margin-top: 10px; color: green; }
+  </style>
+</head>
+<body>
+  <h2>🔑 ESP32 Device ID</h2>
+  <div id="espId">Loading...</div>
+  <button onclick="copyId()">Copy ID</button>
+  <p id="status"></p>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const espId = params.get('id');
+    const espIdDiv = document.getElementById("espId");
+
+    if (espId) {
+      espIdDiv.textContent = espId;
+    } else {
+      espIdDiv.textContent = "❌ No ID found in the URL.";
+    }
+
+    function copyId() {
+      if (espId) {
+        navigator.clipboard.writeText(espId).then(() => {
+          document.getElementById("status").textContent = "✅ Copied to clipboard!";
+        });
+      }
+    }
+  </script>
+</body>
+</html>

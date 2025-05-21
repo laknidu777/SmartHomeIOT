@@ -382,6 +382,10 @@ void setup() {
   // --- Backend WiFi via WiFiManager ---
   Serial.println("📋 No hub mode. Connecting to backend Wi-Fi");
   WiFiManager wm;
+  // --- Add ESP32 ID Display Field ---
+  String espDisplay = "<p style='font-size:16px'><b>Device ID:</b><input type='text' value='" + espId + "' readonly style='width:100%;padding:5px;border:1px solid #ccc;border-radius:4px;' onclick='this.select();document.execCommand(\"copy\")'></p>";
+  WiFiManagerParameter espIdHtml(espDisplay.c_str());
+  wm.addParameter(&espIdHtml);
   wm.setConfigPortalTimeout(120);  // config timeout
   WiFiManagerParameter custom_reset_button("reset_button", "Reset All Settings", "Reset", 6);
   wm.addParameter(&custom_reset_button);

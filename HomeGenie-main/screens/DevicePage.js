@@ -102,7 +102,7 @@ export default function DevicePage() {
   try {
     const url = selectedDevice
       ? `/api/devices/${selectedDevice.id}`
-      : `/api/devices/create`;
+      : `/api/devices/claim`;
     const method = selectedDevice ? "patch" : "post";
 
     const body = {
