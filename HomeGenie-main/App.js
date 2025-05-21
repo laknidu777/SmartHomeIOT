@@ -16,11 +16,11 @@ import DevicePage from "./screens/DevicePage"
 import SupportPage from "./screens/SupportPage";
 import HubPage from "./screens/HubPage";
 import ScheduleScreen from "./screens/ScheduleScreen";
-//import { RoleProvider } from './contexts/RoleContext';
+import { RoleProvider } from './context/RoleContext';
 const Stack = createStackNavigator();
 export default function App() {
   return (
-    
+    <RoleProvider>
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
         <Stack.Screen name="Login" component={Login} />
@@ -84,5 +84,6 @@ export default function App() {
   
       </Stack.Navigator>
     </NavigationContainer>
+    </RoleProvider>
   );
 }

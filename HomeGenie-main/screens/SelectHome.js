@@ -93,11 +93,31 @@ export default function SelectHome() {
 };
 
 
+  // const handleHomeSelect = async (home) => {
+  //   await AsyncStorage.setItem("homeId", String(home.id));
+  //   await AsyncStorage.setItem("homeName", home.name);
+  //   navigation.navigate("Home");
+  // };
   const handleHomeSelect = async (home) => {
-    await AsyncStorage.setItem("homeId", String(home.id));
-    await AsyncStorage.setItem("homeName", home.name);
-    navigation.navigate("Home");
-  };
+  const token = await AsyncStorage.getItem("token");
+  await AsyncStorage.setItem("homeId", String(home.id));
+  await AsyncStorage.setItem("homeName", home.name);
+
+  try {
+    const res = await api.get(`/api/houses/${home.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const role = res.data.role;
+    await AsyncStorage.setItem("userRole", role); // ✅ save it now
+    console.log("📛 Current role:", role);        // ✅ log actual value
+  } catch (err) {
+    console.error("❌ Failed to fetch user role:", err);
+  }
+
+  navigation.navigate("Home");
+};
+
+
 
   const openAddHomeModal = () => {
     setNewHomeName("");

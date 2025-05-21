@@ -15,25 +15,35 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
+import { useRole } from '../context/RoleContext';
+
+//const [role, setRole] = useState(null);
+
 
 export default function Sidebar({ visible, onClose }) {
   //const [darkMode, setDarkMode] = useState(false);
   const slideAnimation = new Animated.Value(0);
+  const { role } = useRole();
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const navigation = useNavigation();
+ // const [role, setRole] = useState(null); 
+
 
   useEffect(() => {
     const fetchUserData = async () => {
-      try {
-        const name = await AsyncStorage.getItem('name');
-        const email = await AsyncStorage.getItem('email');
-        if (name) setUserName(name);
-        if (email) setUserEmail(email);
-      } catch (e) {
-        console.error("❌ Failed to load user data:", e);
-      }
-    };
+  try {
+    const name = await AsyncStorage.getItem('name');
+    const email = await AsyncStorage.getItem('email');
+    const userRole = await AsyncStorage.getItem('userRole');
+    if (name) setUserName(name);
+    if (email) setUserEmail(email);
+    //if (userRole) setRole(userRole); // 🆕 set role
+  } catch (e) {
+    console.error("❌ Failed to load user data:", e);
+  }
+};
+
     fetchUserData();
   }, []);
 
@@ -106,12 +116,13 @@ export default function Sidebar({ visible, onClose }) {
           <ScrollView style={styles.sidebarMenu}>
             <MenuSection title="Main">
               <MenuItem title="Dashboard" icon="grid-outline" active onPress={() => navigation.navigate("Home")} />
-              <MenuItem title="Rooms" icon="home-outline" onPress={() => navigation.navigate("CategoryPage")} />
-              <MenuItem title="Devices" icon="bulb-outline" badge="3" 
-                onPress={() => navigation.navigate("DevicePage")}>
-              </MenuItem>
-              <MenuItem title="Central Hub" icon="server-outline" 
-              onPress={() => navigation.navigate("HubPage")} ></MenuItem> 
+              {role !== "user" && (
+                <>
+                  <MenuItem title="Rooms" icon="home-outline" onPress={() => navigation.navigate("CategoryPage")} />
+                  <MenuItem title="Devices" icon="bulb-outline" badge="3" onPress={() => navigation.navigate("DevicePage")} />
+                  <MenuItem title="Central Hub" icon="server-outline" onPress={() => navigation.navigate("HubPage")} />
+                </>
+              )}
               <MenuItem title="Settings" icon="settings-outline" />
             </MenuSection>
 

@@ -7,10 +7,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Toast from "react-native-toast-message";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
-
+import useRoleGuard from "../hooks/useRoleGuard";
 const API = "http://192.168.8.141:5000/api";
 
 export default function HubPage() {
+  useRoleGuard(["SuperAdmin"]);
   const [homeId, setHomeId] = useState(null);
   const [hubs, setHubs] = useState([]);
   const [selectedHub, setSelectedHub] = useState(null);

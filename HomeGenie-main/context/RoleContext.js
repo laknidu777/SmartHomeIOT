@@ -1,25 +1,24 @@
-import React, { createContext, useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createContext, useContext, useEffect, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export const RoleContext = createContext();
+const RoleContext = createContext(null);
 
 export const RoleProvider = ({ children }) => {
   const [role, setRole] = useState(null);
-  const [homeId, setHomeId] = useState(null);
 
   useEffect(() => {
-    const loadRoleData = async () => {
-      const savedRole = await AsyncStorage.getItem('selectedHomeRole');
-      const savedHomeId = await AsyncStorage.getItem('selectedHomeId');
-      if (savedRole) setRole(savedRole);
-      if (savedHomeId) setHomeId(savedHomeId);
+    const loadRole = async () => {
+      const savedRole = await AsyncStorage.getItem("userRole");
+      setRole(savedRole);
     };
-    loadRoleData();
+    loadRole();
   }, []);
 
   return (
-    <RoleContext.Provider value={{ role, setRole, homeId, setHomeId }}>
+    <RoleContext.Provider value={{ role, setRole }}>
       {children}
     </RoleContext.Provider>
   );
 };
+
+export const useRole = () => useContext(RoleContext);

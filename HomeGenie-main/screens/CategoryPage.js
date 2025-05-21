@@ -13,8 +13,10 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Toast from "react-native-toast-message";
 import { Ionicons } from "@expo/vector-icons";
+import useRoleGuard from "../hooks/useRoleGuard";
 
 export default function CategoryPage({ navigation }) {
+  useRoleGuard(["SuperAdmin"]);
   const [rooms, setRooms] = useState([]);
   const [roomName, setRoomName] = useState("");
   const [editingRoom, setEditingRoom] = useState(null);

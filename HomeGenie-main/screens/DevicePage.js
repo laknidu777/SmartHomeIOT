@@ -15,9 +15,10 @@ import Toast from "react-native-toast-message";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../utils/api";
 import { Picker } from "@react-native-picker/picker";
-
+import useRoleGuard from "../hooks/useRoleGuard";
 
 export default function DevicePage() {
+  useRoleGuard(["SuperAdmin"]);
   const [devices, setDevices] = useState([]);
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
